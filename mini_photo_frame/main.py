@@ -44,17 +44,25 @@ def run_digital_picture_frame(folder_id, local_image_folder, display_interval):
 
     # Step 3: Start the slideshow
     while True:
+        key_pressed = None
+
         for photo_name in os.listdir(local_image_folder):
             photo_path = os.path.join(local_image_folder, photo_name)
-            show_photo(photo_path)
-            time.sleep(display_interval)
+            print(f"Showing photo: {photo_name}")
+            key_pressed = show_photo(photo_path, display_interval)
+            if key_pressed == 27:
+                break
+        
+        if key_pressed == 27:
+            break
+
 
 if __name__ == "__main__":
     # Define your input parameters
     folder_id = "1uqSiuVgeeYTMnmHnlfIi1j4N_D_XzppG"            # Google Drive folder ID
     local_image_folder = "images"                # Local folder to store images
     local_folder_path = os.path.join(base_path, local_image_folder)
-    display_interval = 10                        # Interval in seconds between photos
+    display_interval = 60                        # Interval in seconds between photos
 
     run_digital_picture_frame(folder_id, local_folder_path, display_interval)
 
