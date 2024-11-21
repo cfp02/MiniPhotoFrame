@@ -2,5 +2,6 @@
 .DS_Store
 client_secret.json
 mini_photo_frame/service_account/miniphotoframe-d65b3f6097de.json
+mini_photo_frame/service_account/miniphotoframe-a6bd628f3180.json
 images/
 __pycache__/

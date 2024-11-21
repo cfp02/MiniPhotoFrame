@@ -44,6 +44,7 @@ def run_digital_picture_frame(folder_id, local_image_folder, display_interval):
 
     # Step 3: Start the slideshow
     while True:
+        print("Restarting")
         for photo_name in os.listdir(local_image_folder):
             photo_path = os.path.join(local_image_folder, photo_name)
             show_photo(photo_path)
