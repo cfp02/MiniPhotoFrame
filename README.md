@@ -12,3 +12,11 @@ Repo Usage:
 - Go to Google drive and share the folder with the service account email
 - Run main
 
+
+
+Mac:
+- Works to run but displaying is wrong
+Windows:
+- Works fully
+Raspberry Pi:
+- ------
