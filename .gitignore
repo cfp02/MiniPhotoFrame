@@ -3,3 +3,4 @@
 client_secret.json
 mini_photo_frame/service_account/miniphotoframe-d65b3f6097de.json
 images/
+__pycache__/
