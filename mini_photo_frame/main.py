@@ -40,7 +40,7 @@ def sync_drive_images(service, folder_id, local_folder):
 
     return new_photos, [photo['name'] for photo in drive_photos]
 
-def run_digital_picture_frame(folder_id, local_image_folder, display_interval):
+def run_digital_picture_frame(folder_id, local_image_folder, display_interval, sync_interval):
     # Step 1: Authenticate and create the Drive service
     creds = authenticate_google_drive()
     service = create_drive_service(creds)
@@ -48,7 +48,6 @@ def run_digital_picture_frame(folder_id, local_image_folder, display_interval):
     # Initial sync
     new_photos, all_photos = sync_drive_images(service, folder_id, local_image_folder)
     last_sync_time = time.time()
-    sync_interval = 300  # Check for new photos every 5 minutes
 
     while True:
         current_time = time.time()
@@ -91,8 +90,9 @@ if __name__ == "__main__":
     folder_id = "1uqSiuVgeeYTMnmHnlfIi1j4N_D_XzppG"  # Google Drive folder ID
     local_image_folder = "images"                      # Local folder to store images
     local_folder_path = os.path.join(base_path, local_image_folder)
-    display_interval = 60                         # 1 minute between photos
+    display_interval = 60                         # 1 minutes between photos
+    sync_interval = 5 * 60                            # Check Google Drive every 5 minutes
 
-    run_digital_picture_frame(folder_id, local_folder_path, display_interval)
+    run_digital_picture_frame(folder_id, local_folder_path, display_interval, sync_interval)
 
 
