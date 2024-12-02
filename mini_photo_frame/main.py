@@ -1,12 +1,15 @@
 import time
 import os
 import random
+import sys
 from drive_auth import authenticate_google_drive
-from drive_manager import create_drive_service, list_photos, download_photo
+from drive_manager import (
+    create_drive_service, list_photos, download_photo,
+    get_or_create_settings_folder, get_settings_from_folders,
+    ensure_default_settings_folders
+)
 from display_manager import show_photo
 from datetime import datetime, timedelta
-
-base_path = os.path.dirname(os.path.realpath(__file__))
 
 def sync_drive_images(service, folder_id, local_folder):
     """Syncs images and returns a list of any new photos downloaded"""
@@ -40,30 +43,68 @@ def sync_drive_images(service, folder_id, local_folder):
 
     return new_photos, [photo['name'] for photo in drive_photos]
 
-def run_digital_picture_frame(folder_id, local_image_folder, display_interval, sync_interval):
-    # Step 1: Authenticate and create the Drive service
-    creds = authenticate_google_drive()
-    service = create_drive_service(creds)
+def load_config():
+    config = {
+        'FOLDER_ID': None,
+        'DISPLAY_INTERVAL': 45 * 60,  # 45 minutes default
+        'SYNC_INTERVAL': 5 * 60,      # 5 minutes default
+        'SHUFFLE': True,              # Shuffle by default after showing new photos
+    }
+    
+    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'config.txt')
+    if not os.path.exists(config_path):
+        config_path = 'config.txt'  # Try current directory (for deployment)
+    
+    if os.path.exists(config_path):
+        with open(config_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    key, value = line.split('=', 1)
+                    config[key.strip()] = value.strip()
+        
+        # Convert values to appropriate types
+        config['DISPLAY_INTERVAL'] = int(config['DISPLAY_INTERVAL'])
+        config['SYNC_INTERVAL'] = int(config['SYNC_INTERVAL'])
+        if 'SHUFFLE' in config:
+            config['SHUFFLE'] = config['SHUFFLE'].lower() == 'true'
+    
+    return config
 
+def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
+    """Run the picture frame with the given settings"""
     # Initial sync
     new_photos, all_photos = sync_drive_images(service, folder_id, local_image_folder)
     last_sync_time = time.time()
+    last_settings_check = time.time()
+    settings_check_interval = 60  # Check settings every minute
 
     while True:
         current_time = time.time()
         
-        # Check for new photos periodically
-        if current_time - last_sync_time >= sync_interval:
+        # Check for settings updates periodically
+        if current_time - last_settings_check >= settings_check_interval:
+            settings_folder_id = get_or_create_settings_folder(service, folder_id)
+            new_settings = get_settings_from_folders(service, settings_folder_id, settings)
+            if new_settings != settings:
+                print("Settings updated from Google Drive folders")
+                settings.update(new_settings)
+            last_settings_check = current_time
+        
+        # Check for new photos
+        if current_time - last_sync_time >= settings['sync_interval']:
             print("Checking for new photos...")
             new_photos, all_photos = sync_drive_images(service, folder_id, local_image_folder)
             last_sync_time = current_time
 
-        # Show new photos first, then shuffle and show all photos
-        photos_to_display = new_photos.copy()  # Show new photos in chronological order
+        # Show new photos first, then shuffle remaining if enabled
+        photos_to_display = new_photos.copy()
         remaining_photos = [p for p in all_photos if p not in new_photos]
-        random.shuffle(remaining_photos)  # Shuffle the remaining photos
-        photos_to_display.extend(remaining_photos)  # Add shuffled photos after new ones
-        new_photos = []  # Clear new photos list after displaying them
+        
+        if settings['shuffle']:
+            random.shuffle(remaining_photos)
+        photos_to_display.extend(remaining_photos)
+        new_photos = []
 
         for photo_name in photos_to_display:
             photo_path = os.path.join(local_image_folder, photo_name)
@@ -71,28 +112,58 @@ def run_digital_picture_frame(folder_id, local_image_folder, display_interval, s
                 continue
                 
             print(f"Showing photo: {photo_name}")
-            key_pressed = show_photo(photo_path, display_interval)
+            key_pressed = show_photo(photo_path, settings['display_interval'])
             
-            # Check for new photos if it's time
+            # Check for updates during long display intervals
             current_time = time.time()
-            if current_time - last_sync_time >= sync_interval:
+            if current_time - last_sync_time >= settings['sync_interval']:
                 print("Checking for new photos...")
                 new_photos, all_photos = sync_drive_images(service, folder_id, local_image_folder)
                 last_sync_time = current_time
-                if new_photos:  # If new photos were found, break the current loop to show them
+                if new_photos:
                     break
             
             if key_pressed == 27:  # ESC key
                 return
 
-if __name__ == "__main__":
-    # Define your input parameters
-    folder_id = "1uqSiuVgeeYTMnmHnlfIi1j4N_D_XzppG"  # Google Drive folder ID
-    local_image_folder = "images"                      # Local folder to store images
-    local_folder_path = os.path.join(base_path, local_image_folder)
-    display_interval = 60                         # 1 minutes between photos
-    sync_interval = 5 * 60                            # Check Google Drive every 5 minutes
+def main():
+    # Load configuration
+    config = load_config()
+    
+    if not config['FOLDER_ID'] or config['FOLDER_ID'] == 'your_google_drive_folder_id_here':
+        print("Please set your Google Drive folder ID in config.txt")
+        return
 
-    run_digital_picture_frame(folder_id, local_folder_path, display_interval, sync_interval)
+    # Get base path (works both in development and deployed)
+    if getattr(sys, 'frozen', False):
+        base_path = os.path.dirname(sys.executable)
+    else:
+        base_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+
+    local_image_folder = os.path.join(base_path, "images")
+    
+    # Initialize service and settings
+    creds = authenticate_google_drive()
+    service = create_drive_service(creds)
+    
+    # Convert config to settings format
+    settings = {
+        'display_interval': config['DISPLAY_INTERVAL'],
+        'sync_interval': config['SYNC_INTERVAL'],
+        'shuffle': config.get('SHUFFLE', True),
+        'filter': None
+    }
+    
+    # Set up settings folders in Google Drive
+    settings_folder_id = get_or_create_settings_folder(service, config['FOLDER_ID'])
+    ensure_default_settings_folders(service, settings_folder_id, settings)
+    
+    # Get any existing settings from folders
+    settings = get_settings_from_folders(service, settings_folder_id, settings)
+    
+    run_digital_picture_frame(config['FOLDER_ID'], local_image_folder, service, settings)
+
+if __name__ == "__main__":
+    main()
 
 

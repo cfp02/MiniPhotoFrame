@@ -5,3 +5,5 @@ google-api-python-client
 pillow
 screeninfo
 opencv-python
+pyinstaller
+setuptools
