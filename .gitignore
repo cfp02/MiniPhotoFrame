@@ -1,7 +1,29 @@
-.venv
-.DS_Store
-client_secret.json
-mini_photo_frame/service_account/miniphotoframe-d65b3f6097de.json
-mini_photo_frame/service_account/miniphotoframe-a6bd628f3180.json
-images/
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+.Python
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Development
+*.log
+.DS_Store
+.idea/
+.vscode/
+
+# Build
+build/
+dist/
+*.spec
+deployment/
+
+# Application specific
+mini_photo_frame/images/*
+!mini_photo_frame/images/.gitkeep
+mini_photo_frame/service_account/*
+!mini_photo_frame/service_account/.gitkeep
+config.txt  # Ignore local config

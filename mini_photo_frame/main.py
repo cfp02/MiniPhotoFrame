@@ -51,11 +51,24 @@ def load_config():
         'SHUFFLE': True,              # Shuffle by default after showing new photos
     }
     
-    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'config.txt')
-    if not os.path.exists(config_path):
-        config_path = 'config.txt'  # Try current directory (for deployment)
+    # Try to find config file in different locations
+    possible_paths = [
+        # Deployed mode: config.txt next to executable
+        os.path.join(get_base_path(), 'config.txt'),
+        # Development mode: config.txt in project root
+        os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'config.txt'),
+        # Fallback: config.txt in current directory
+        'config.txt'
+    ]
     
-    if os.path.exists(config_path):
+    config_path = None
+    for path in possible_paths:
+        if os.path.exists(path):
+            config_path = path
+            break
+    
+    if config_path:
+        print(f"Using config file: {config_path}")
         with open(config_path, 'r') as f:
             for line in f:
                 line = line.strip()
@@ -68,8 +81,21 @@ def load_config():
         config['SYNC_INTERVAL'] = int(config['SYNC_INTERVAL'])
         if 'SHUFFLE' in config:
             config['SHUFFLE'] = config['SHUFFLE'].lower() == 'true'
+    else:
+        print("\nNo config.txt found. Using default settings.")
+        if not is_frozen():
+            print("Development mode: Create a config.txt file in the project root.")
     
     return config
+
+def get_images_path():
+    """Get the images directory path based on environment"""
+    if is_frozen():
+        # In deployed mode, images folder is next to the executable
+        return os.path.join(get_base_path(), 'images')
+    else:
+        # In development mode, images folder is in the project directory
+        return os.path.join(get_base_path(), 'mini_photo_frame', 'images')
 
 def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
     """Run the picture frame with the given settings"""
@@ -131,19 +157,19 @@ def main():
     config = load_config()
     
     if not config['FOLDER_ID'] or config['FOLDER_ID'] == 'your_google_drive_folder_id_here':
-        print("Please set your Google Drive folder ID in config.txt")
+        print("\nPlease set your Google Drive folder ID in config.txt")
+        if not is_frozen():
+            print("Development mode: Edit config.txt in the project root.")
         return
 
-    # Get base path (works both in development and deployed)
-    if getattr(sys, 'frozen', False):
-        base_path = os.path.dirname(sys.executable)
-    else:
-        base_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-
-    local_image_folder = os.path.join(base_path, "images")
+    # Get the correct images path
+    local_image_folder = get_images_path()
     
     # Initialize service and settings
     creds = authenticate_google_drive()
+    if not creds:
+        return
+        
     service = create_drive_service(creds)
     
     # Convert config to settings format
@@ -160,6 +186,11 @@ def main():
     
     # Get any existing settings from folders
     settings = get_settings_from_folders(service, settings_folder_id, settings)
+    
+    print("\nStarting photo frame...")
+    print(f"Display interval: {settings['display_interval'] // 60} minutes")
+    print(f"Sync interval: {settings['sync_interval'] // 60} minutes")
+    print(f"Shuffle mode: {settings['shuffle']}")
     
     run_digital_picture_frame(config['FOLDER_ID'], local_image_folder, service, settings)
 

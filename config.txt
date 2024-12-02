@@ -1,0 +1,18 @@
+# Configuration settings for Mini Photo Frame (Development)
+# These are default settings that can be overridden by folders in Google Drive
+
+# Your Google Drive folder ID (required)
+# This is the long string of characters in the URL when you open your Google Drive folder
+FOLDER_ID=1uqSiuVgeeYTMnmHnlfIi1j4N_D_XzppG
+
+# Display interval in seconds (45 minutes default)
+# Can be overridden by creating a folder named 'display_interval_45' in the settings folder
+DISPLAY_INTERVAL=2700
+
+# Sync interval in seconds (5 minutes default)
+# Can be overridden by creating a folder named 'sync_interval_5' in the settings folder
+SYNC_INTERVAL=300
+
+# Whether to shuffle photos after showing new ones
+# Can be overridden by creating a folder named 'shuffle_true' or 'shuffle_false' in the settings folder
+SHUFFLE=true 
