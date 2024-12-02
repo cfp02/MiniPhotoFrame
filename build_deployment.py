@@ -4,23 +4,42 @@ import shutil
 import sys
 
 def build_executable():
+    # Get absolute paths
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    main_path = os.path.join(base_dir, 'mini_photo_frame', 'main.py')
+    images_path = os.path.join(base_dir, 'mini_photo_frame', 'images')
+    deployment_path = os.path.join(base_dir, 'deployment')
+    
+    # Verify main.py exists
+    if not os.path.exists(main_path):
+        print(f"Error: Cannot find {main_path}")
+        return
+        
+    print(f"Building from: {main_path}")
+    print(f"Images path: {images_path}")
+    print(f"Deployment path: {deployment_path}")
+    
     # Get the correct extension for the executable based on the platform
     exe_extension = '.exe' if sys.platform == 'win32' else ''
     
+    # Create deployment directory structure
+    if os.path.exists(deployment_path):
+        shutil.rmtree(deployment_path)
+    os.makedirs(deployment_path)
+    os.makedirs(os.path.join(deployment_path, 'service_account'))
+    
     # PyInstaller configuration
     PyInstaller.__main__.run([
-        'mini_photo_frame/main.py',
+        main_path,
         '--onefile',
         '--name=photo_frame',
-        '--add-data=mini_photo_frame/images:images',
-        '--distpath=deployment',  # Output directly to deployment folder
+        f'--add-data={images_path}:images',
+        f'--distpath={deployment_path}',
+        '--clean',
     ])
-
-    # Create deployment directory structure
-    os.makedirs('deployment/service_account', exist_ok=True)
     
     # Create README
-    with open('deployment/README.txt', 'w') as f:
+    with open(os.path.join(deployment_path, 'README.txt'), 'w') as f:
         f.write(f"""Mini Photo Frame Deployment Package
 
 Setup Instructions:
@@ -46,7 +65,7 @@ Note: Google Drive settings override local config.txt settings.
 """)
 
     # Create config file
-    with open('deployment/config.txt', 'w') as f:
+    with open(os.path.join(deployment_path, 'config.txt'), 'w') as f:
         f.write("""# Configuration settings for Mini Photo Frame
 # These are default settings that can be overridden by folders in Google Drive
 

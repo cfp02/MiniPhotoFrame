@@ -68,38 +68,52 @@ def get_settings_from_folders(service, settings_folder_id, default_settings):
     results = service.files().list(q=query, spaces='drive', fields="files(name)").execute()
     folders = results.get('files', [])
     
+    # Track which settings have been found
+    found_settings = set()
+    
     # Parse folder names for settings
     for folder in folders:
         name = folder['name'].lower()
         try:
-            if name.startswith('display_interval_'):
+            if name.startswith('display_interval_mins_'):
                 value = int(name.split('_')[-1]) * 60  # Convert minutes to seconds
                 settings['display_interval'] = value
-            elif name.startswith('sync_interval_'):
+                found_settings.add('display_interval')
+            elif name.startswith('sync_interval_mins_'):
                 value = int(name.split('_')[-1]) * 60  # Convert minutes to seconds
                 settings['sync_interval'] = value
+                found_settings.add('sync_interval')
             elif name.startswith('shuffle_'):
                 settings['shuffle'] = name.split('_')[-1].lower() == 'true'
+                found_settings.add('shuffle')
             elif name.startswith('filter_'):
                 settings['filter'] = name[7:]  # Remove 'filter_' prefix
+                found_settings.add('filter')
         except ValueError:
             continue
     
-    return settings
+    return settings, found_settings
 
 def ensure_default_settings_folders(service, settings_folder_id, default_settings):
-    """Create default settings folders if they don't exist"""
-    # Convert seconds to minutes for folder names
-    display_mins = default_settings['display_interval'] // 60
-    sync_mins = default_settings['sync_interval'] // 60
+    """Create default settings folders if they don't exist and no custom ones are present"""
+    # First, get current settings and which ones were found
+    _, found_settings = get_settings_from_folders(service, settings_folder_id, default_settings)
     
-    default_folders = [
-        f'display_interval_{display_mins}',
-        f'sync_interval_{sync_mins}',
-        f'shuffle_{str(default_settings["shuffle"]).lower()}'
-    ]
+    # Only create default folders for settings that don't have any folders yet
+    default_folders = []
     
-    # Check existing folders
+    if 'display_interval' not in found_settings:
+        display_mins = default_settings['display_interval'] // 60
+        default_folders.append(f'display_interval_mins_{display_mins}')
+    
+    if 'sync_interval' not in found_settings:
+        sync_mins = default_settings['sync_interval'] // 60
+        default_folders.append(f'sync_interval_mins_{sync_mins}')
+    
+    if 'shuffle' not in found_settings:
+        default_folders.append(f'shuffle_{str(default_settings["shuffle"]).lower()}')
+    
+    # Check existing folders to avoid duplicates
     query = f"mimeType='application/vnd.google-apps.folder' and '{settings_folder_id}' in parents"
     results = service.files().list(q=query, spaces='drive', fields="files(name)").execute()
     existing_folders = set(folder['name'].lower() for folder in results.get('files', []))
@@ -108,3 +122,4 @@ def ensure_default_settings_folders(service, settings_folder_id, default_setting
     for folder_name in default_folders:
         if folder_name.lower() not in existing_folders:
             create_folder(service, folder_name, settings_folder_id)
+            print(f"Created default settings folder: {folder_name}")

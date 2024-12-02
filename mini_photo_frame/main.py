@@ -115,9 +115,15 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
         # Check for settings updates periodically
         if current_time - last_settings_check >= settings_check_interval:
             settings_folder_id = get_or_create_settings_folder(service, folder_id)
-            new_settings = get_settings_from_folders(service, settings_folder_id, settings)
+            new_settings, _ = get_settings_from_folders(service, settings_folder_id, settings)
             if new_settings != settings:
-                print("Settings updated from Google Drive folders")
+                print("\nSettings updated from Google Drive folders:")
+                if new_settings['display_interval'] != settings['display_interval']:
+                    print(f"Display interval: {new_settings['display_interval'] // 60} minutes")
+                if new_settings['sync_interval'] != settings['sync_interval']:
+                    print(f"Sync interval: {new_settings['sync_interval'] // 60} minutes")
+                if new_settings['shuffle'] != settings['shuffle']:
+                    print(f"Shuffle mode: {new_settings['shuffle']}")
                 settings.update(new_settings)
             last_settings_check = current_time
         
@@ -189,9 +195,9 @@ def main():
     ensure_default_settings_folders(service, settings_folder_id, settings)
     
     # Get any existing settings from folders
-    settings = get_settings_from_folders(service, settings_folder_id, settings)
+    settings, _ = get_settings_from_folders(service, settings_folder_id, settings)
     
-    print("\nStarting photo frame...")
+    print("\nStarting photo frame with settings:")
     print(f"Display interval: {settings['display_interval'] // 60} minutes")
     print(f"Sync interval: {settings['sync_interval'] // 60} minutes")
     print(f"Shuffle mode: {settings['shuffle']}")
