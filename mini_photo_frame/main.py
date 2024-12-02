@@ -2,7 +2,11 @@ import time
 import os
 import random
 import sys
-from drive_auth import authenticate_google_drive
+from drive_auth import (
+    authenticate_google_drive, 
+    is_frozen, 
+    get_base_path
+)
 from drive_manager import (
     create_drive_service, list_photos, download_photo,
     get_or_create_settings_folder, get_settings_from_folders,
