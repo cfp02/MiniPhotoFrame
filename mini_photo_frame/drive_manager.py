@@ -20,7 +20,12 @@ def list_photos(service, folder_id=None):
     query = "mimeType='image/jpeg'"
     if folder_id:
         query += f" and '{folder_id}' in parents"
-    results = service.files().list(q=query, spaces='drive', fields="nextPageToken, files(id, name)").execute()
+    results = service.files().list(
+        q=query,
+        spaces='drive',
+        fields="nextPageToken, files(id, name, createdTime)",
+        orderBy="createdTime desc"
+    ).execute()
     return results.get('files', [])
 
 def download_photo(service, file_id, file_name):

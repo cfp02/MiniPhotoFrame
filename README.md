@@ -18,5 +18,6 @@ Mac:
 - Works to run but displaying is wrong
 Windows:
 - Works fully
+
 Raspberry Pi:
-- ------
+- Works fully
