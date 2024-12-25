@@ -108,6 +108,10 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
     last_sync_time = time.time()
     last_settings_check = time.time()
     settings_check_interval = 60  # Check settings every minute
+    
+    # Track current position for back functionality
+    current_index = 0
+    photo_history = []
 
     while True:
         current_time = time.time()
@@ -133,22 +137,56 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
             new_photos, all_photos = sync_drive_images(service, folder_id, local_image_folder)
             last_sync_time = current_time
 
-        # Show new photos first, then shuffle remaining if enabled
-        photos_to_display = new_photos.copy()
-        remaining_photos = [p for p in all_photos if p not in new_photos]
-        
-        if settings['shuffle']:
-            random.shuffle(remaining_photos)
-        photos_to_display.extend(remaining_photos)
-        new_photos = []
+        # Prepare photo list
+        if new_photos:
+            # New photos go first
+            photos_to_display = new_photos.copy()
+            remaining_photos = [p for p in all_photos if p not in new_photos]
+            if settings['shuffle']:
+                random.shuffle(remaining_photos)
+            photos_to_display.extend(remaining_photos)
+            current_index = 0  # Start from beginning with new photos
+            photo_history = []  # Clear history with new photos
+        elif current_index >= len(all_photos):
+            # Reached end of list, reshuffle if enabled
+            if settings['shuffle']:
+                random.shuffle(all_photos)
+            current_index = 0
+            photo_history = []
+            photos_to_display = all_photos
+        else:
+            photos_to_display = all_photos
 
-        for photo_name in photos_to_display:
+        while current_index < len(photos_to_display):
+            photo_name = photos_to_display[current_index]
             photo_path = os.path.join(local_image_folder, photo_name)
             if not os.path.exists(photo_path):
+                current_index += 1
                 continue
                 
             print(f"Showing photo: {photo_name}")
-            key_pressed = show_photo(photo_path, settings['display_interval'])
+            action = show_photo(photo_path, settings['display_interval'])
+            
+            if action == "exit":
+                return
+            elif action == "reshuffle":
+                random.shuffle(photos_to_display)
+                current_index = 0
+                photo_history = []
+                print("Reshuffling photos...")
+            elif action == "new":
+                # Force a sync check
+                last_sync_time = 0
+                break
+            elif action == "back":
+                if photo_history:
+                    current_index = photo_history.pop()
+                    continue
+            else:  # "next" or any other key
+                photo_history.append(current_index)
+                if len(photo_history) > 50:  # Limit history size
+                    photo_history.pop(0)
+                current_index += 1
             
             # Check for updates during long display intervals
             current_time = time.time()
@@ -158,9 +196,6 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
                 last_sync_time = current_time
                 if new_photos:
                     break
-            
-            if key_pressed == 27:  # ESC key
-                return
 
 def main():
     # Load configuration

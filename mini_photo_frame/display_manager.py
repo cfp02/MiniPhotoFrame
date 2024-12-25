@@ -1,68 +1,128 @@
 # display_manager.py
-import os
-from PIL import Image
-from screeninfo import get_monitors
 import cv2
-import platform
+from screeninfo import get_monitors
+from iptcinfo3 import IPTCInfo
+import logging
+import os
 
+# Suppress IPTCInfo warnings
+iptcinfo_logger = logging.getLogger('iptcinfo')
+iptcinfo_logger.setLevel(logging.ERROR)
 
-def show_photo(file_name, delay_seconds):
-    '''
-    Takes a file name and displays the image fullscreen on the device.
-    '''
+def get_caption(image_path):
+    """Get caption and date from image IPTC info"""
+    try:
+        info = IPTCInfo(image_path)
+        caption = info['caption/abstract']
+        date = info['date created']
+        
+        if date:
+            date = date.decode('utf-8')
+            # Split date yyyymmdd into yyyy/mm/dd
+            date = date[:4] + '/' + date[4:6] + '/' + date[6:]
+        
+        if caption is None:
+            # Use filename as caption if no IPTC caption
+            caption = os.path.basename(image_path)
+            if len(caption) > 15 and caption.endswith('.jpg'):
+                caption = caption[:-4]  # Remove .jpg extension
+        else:
+            caption = caption.decode('UTF-8')
+            
+        if date:
+            caption = f"{caption} - {date}"
+            
+        return caption
+    except Exception as e:
+        print(f"Error reading caption: {e}")
+        return os.path.basename(image_path)
 
-    # Get the dimensions of the file, identify which is the larger dimension, and resize the image to have the long edge stretch the full length of that screen dimension.
-
-    img = cv2.imread(file_name)
-    img_height, img_width, _ = img.shape
-
-    scaling_factor = 2 if platform.system() == 'Darwin' else 1
-
-
-    # Get the screen dimensions
-    screen_width, screen_height = get_monitors()[0].width, get_monitors()[0].height
-    screen_width = screen_width * scaling_factor
-    screen_height = screen_height * scaling_factor
-    img_aspect_ratio = img_width / img_height
-    screen_aspect_ratio = screen_width / screen_height
-
-    if img_aspect_ratio > screen_aspect_ratio:
-        # Image is wider relative to the screen
-        new_width = screen_width
-        new_height = int(screen_width / img_aspect_ratio)
-    else:
-        # Image is taller relative to the screen
-        new_width = int(screen_height * img_aspect_ratio)
-        new_height = screen_height
-
-    img_resized = cv2.resize(img, (new_width, new_height))
-
-     # Calculate the borders to center the image
-    top_border = (screen_height - new_height) // 2
-    bottom_border = screen_height - new_height - top_border
-    left_border = (screen_width - new_width) // 2
-    right_border = screen_width - new_width - left_border
-
-    # print('Screen size:', screen_width, screen_height)
-
-    # Create a canvas with black borders
-    canvas = cv2.copyMakeBorder(img_resized, 
-                                top=top_border, 
-                                bottom=bottom_border, 
-                                left=left_border, 
-                                right=right_border, 
-                                borderType=cv2.BORDER_CONSTANT, 
-                                value=[0, 0, 0])
+def get_display_image(image_path):
+    """Prepare image for display with caption"""
+    image_height = 1200  # Target height for portrait images
     
-    # Ensure the canvas size matches the screen resolution
-    assert canvas.shape[0] == screen_height, f"Height mismatch: canvas={canvas.shape[0]}, screen={screen_height}"
-    assert canvas.shape[1] == screen_width, f"Width mismatch: canvas={canvas.shape[1]}, screen={screen_width}"
+    # Read and process image
+    img = cv2.imread(image_path)
+    if img is None:
+        print(f"Error loading image: {image_path}")
+        return None
+        
+    # Scale image
+    if img.shape[0] > img.shape[1]:  # Portrait orientation
+        scale = image_height / img.shape[0]
+        img = cv2.resize(img, (int(img.shape[1]*scale), image_height))
+    
+    # Add caption
+    caption = get_caption(image_path)
+    
+    # Caption settings
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.7
+    thickness = 1
+    text_color = (255, 255, 255)  # White
+    outline_color = (0, 0, 0)      # Black
+    outline_thickness = 3
+    
+    # Get text size and position
+    text_size = cv2.getTextSize(caption, font, font_scale, thickness)[0]
+    text_x = int((img.shape[1] - text_size[0]) / 2)  # Center text
+    text_y = img.shape[0] - 25  # Bottom padding
+    
+    # Draw text outline (background)
+    cv2.putText(img, caption, (text_x, text_y), font, font_scale, 
+                outline_color, outline_thickness, cv2.LINE_AA)
+    # Draw text (foreground)
+    cv2.putText(img, caption, (text_x, text_y), font, font_scale,
+                text_color, thickness, cv2.LINE_AA)
+    
+    return img
 
-    cv2.namedWindow("test", cv2.WND_PROP_FULLSCREEN)          
-    cv2.setWindowProperty("test", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-    cv2.imshow("test", canvas)
-    # Waits until a key is pressed, and stores that key value for us to use
-    key=cv2.waitKey(delay_seconds*1000)
-
+def show_photo(image_path, display_interval):
+    """Display photo with proper scaling and return key press"""
+    img = get_display_image(image_path)
+    if img is None:
+        return None
+        
+    # Get screen info
+    screen = get_monitors()[0]
+    screen_width = screen.width
+    screen_height = screen.height
+    
+    # Calculate padding to center image
+    image_height = img.shape[0]
+    image_width = img.shape[1]
+    image_ratio = screen_height / image_height
+    lr_padding = int((screen_width - image_width * image_ratio) / 2)
+    
+    # Add padding
+    img = cv2.copyMakeBorder(
+        src=img,
+        top=0,
+        bottom=0,
+        left=lr_padding,
+        right=lr_padding,
+        borderType=cv2.BORDER_CONSTANT
+    )
+    
+    # Display in fullscreen
+    window_name = "Photo Frame"
+    cv2.namedWindow(window_name, cv2.WND_PROP_FULLSCREEN)
+    cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    cv2.imshow(window_name, img)
+    
+    # Wait for key press or interval
+    key = cv2.waitKey(display_interval * 1000)
     cv2.destroyAllWindows()
-    return key
+    
+    if key == -1:  # No key pressed
+        return "next"
+    elif key == 27:  # ESC
+        return "exit"
+    elif key == ord('r'):  # Reshuffle
+        return "reshuffle"
+    elif key == ord('n'):  # New images
+        return "new"
+    elif key == ord('b'):  # Back
+        return "back"
+    else:
+        return "next"

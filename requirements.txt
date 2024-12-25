@@ -7,3 +7,4 @@ screeninfo
 opencv-python
 pyinstaller
 setuptools
+iptcinfo3
