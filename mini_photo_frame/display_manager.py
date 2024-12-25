@@ -4,10 +4,15 @@ from screeninfo import get_monitors
 from iptcinfo3 import IPTCInfo
 import logging
 import os
+import platform
 
 # Suppress IPTCInfo warnings
 iptcinfo_logger = logging.getLogger('iptcinfo')
 iptcinfo_logger.setLevel(logging.ERROR)
+
+# Force OpenCV to use X11 on Linux
+if platform.system() == 'Linux':
+    os.environ['QT_QPA_PLATFORM'] = 'xcb'
 
 def get_caption(image_path):
     """Get caption and date from image IPTC info"""
