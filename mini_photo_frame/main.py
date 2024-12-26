@@ -138,7 +138,15 @@ def sync_drive_images(service, folder_id, local_folder, settings=None):
             except Exception as e:
                 print(f"  Error deleting {rel_path}: {str(e)}")
     
-    return new_photos, [photo['path'] for photo in drive_photos]
+    # Return paths for all photos, with new ones first
+    all_paths = [p['path'] for p in drive_photos]
+    if new_photos:
+        # Remove new photos from all_paths to avoid duplicates
+        all_paths = [p for p in all_paths if p not in new_photos]
+        # Add new photos at the start
+        all_paths = new_photos + all_paths
+    
+    return new_photos, all_paths
 
 
 def validate_images_path(path):
@@ -243,7 +251,6 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
                 if new_settings.get('search') != settings.get('search'):
                     print(f"Search query updated: {new_settings.get('search', '(none)')}")
                     settings_updated = True
-                    already_shown.clear()  # Reset shown tracking on search change
                 settings.update(new_settings)
             last_settings_check = current_time
 
@@ -259,16 +266,15 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
                 photo_history = []
                 already_shown.clear()
             elif new_photos:
-                # If just new photos, add them to the start but keep current position
-                remaining_display = photos_to_display[current_index:]  # Keep unshown photos
-                photos_to_display = new_photos + remaining_display
-                # Don't reset current_index - continue from where we were
+                # If just new photos, add them to the start but preserve current queue
+                photos_to_display = new_photos + [p for p in photos_to_display if p not in new_photos]
+                print(f"Added {len(new_photos)} new photos to the start of the queue")
 
         # Handle end of list
         if current_index >= len(photos_to_display):
             if settings['shuffle']:
                 # When reshuffling, exclude photos we've already shown this cycle
-                unshown_photos = [p for p in all_photos if p not in already_shown]
+                unshown_photos = [p for p in photos_to_display if p not in already_shown]
                 if unshown_photos:
                     random.shuffle(unshown_photos)
                     photos_to_display = unshown_photos
@@ -304,30 +310,29 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
             photo_history = []
             print("Reshuffling photos...")
         elif action == "new":
-            # Force a sync check with settings update
+            # Force a sync check
             last_sync_time = 0
             last_settings_check = 0
         elif action == "back":
             if photo_history:
                 current_index = photo_history.pop()
                 if photos_to_display[current_index] in already_shown:
-                    already_shown.remove(photos_to_display[current_index])  # Allow reshowing on back
+                    already_shown.remove(photos_to_display[current_index])
         else:  # "next" or any other key
             photo_history.append(current_index)
             if len(photo_history) > 50:  # Limit history size
                 photo_history.pop(0)
             current_index += 1
             
-            # Quick check for new photos on 'next', but don't recreate search results
+            # Quick check for new photos on 'next'
             if current_time - last_sync_time >= 30:  # Only check if it's been at least 30 seconds
                 temp_settings = settings.copy()
                 temp_settings.pop('search', None)  # Remove search to preserve current order
                 new_photos, _ = sync_drive_images(service, folder_id, local_image_folder, temp_settings)
                 last_sync_time = current_time
                 if new_photos:
-                    # Add new photos to the front but preserve the rest of the display queue
-                    remaining_display = photos_to_display[current_index:]  # Keep unshown photos
-                    photos_to_display = new_photos + remaining_display
+                    # Add new photos to the front but preserve current queue
+                    photos_to_display = new_photos + [p for p in photos_to_display if p not in new_photos]
                     print(f"Added {len(new_photos)} new photos to the start of the queue")
 
 def main():
