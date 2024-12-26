@@ -6,6 +6,7 @@ import googleapiclient.http
 import io
 import logging
 import random
+import socket
 
 # Set up logging with more detailed format
 logging.basicConfig(
@@ -342,3 +343,26 @@ def ensure_default_settings_folders(service, settings_folder_id, default_setting
     except Exception as e:
         logger.error(f"Error ensuring default settings folders: {str(e)}")
         raise
+
+def check_internet_connection():
+    """Check if there is an active internet connection"""
+    try:
+        # Try to connect to Google's DNS server
+        socket.create_connection(("8.8.8.8", 53), timeout=3)
+        return True
+    except OSError:
+        return False
+
+def sync_drive_images(service, folder_id, local_folder, settings=None):
+    """Syncs images and returns a list of any new photos downloaded"""
+    # Check internet connection first
+    if not check_internet_connection():
+        logger.warning("No internet connection detected. Skipping sync with Google Drive.")
+        # Return empty lists to continue with local photos
+        return [], [os.path.relpath(os.path.join(root, f), local_folder).replace('\\', '/')
+                   for root, _, files in os.walk(local_folder)
+                   for f in files if f != ".gitkeep"]
+
+    # Ensure the local folder exists
+    if not os.path.exists(local_folder):
+        os.makedirs(local_folder)

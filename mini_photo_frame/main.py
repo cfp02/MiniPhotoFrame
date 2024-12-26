@@ -10,7 +10,7 @@ from drive_auth import (
 from drive_manager import (
     create_drive_service, list_photos, download_photo,
     get_or_create_settings_folder, get_settings_from_folders,
-    ensure_default_settings_folders
+    ensure_default_settings_folders, check_internet_connection
 )
 from display_manager import show_photo
 from datetime import datetime, timedelta
@@ -222,6 +222,9 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
     last_sync_time = time.time()
     last_settings_check = time.time()
     settings_check_interval = 60  # Check settings every minute
+    last_internet_check = 0
+    internet_check_interval = 30  # Check internet every 30 seconds
+    is_offline = not check_internet_connection()
     
     # Track current position for back functionality
     current_index = 0
@@ -233,29 +236,46 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
         current_time = time.time()
         settings_updated = False
         
+        # Check internet connectivity periodically
+        if current_time - last_internet_check >= internet_check_interval:
+            was_offline = is_offline
+            is_offline = not check_internet_connection()
+            if was_offline and not is_offline:
+                print("\nInternet connection restored. Resuming normal operation.")
+                # Force a sync on reconnection
+                last_sync_time = 0
+                last_settings_check = 0
+            elif not was_offline and is_offline:
+                print("\nInternet connection lost. Operating in offline mode.")
+            last_internet_check = current_time
+        
         # Check for settings updates periodically
-        if current_time - last_settings_check >= settings_check_interval:
-            settings_folder_id = get_or_create_settings_folder(service, folder_id)
-            # Ensure settings folders exist
-            ensure_default_settings_folders(service, settings_folder_id, settings)
-            # Get current settings
-            new_settings, _ = get_settings_from_folders(service, settings_folder_id, settings)
-            if new_settings != settings:
-                print("\nSettings updated from Google Drive folders:")
-                if new_settings['display_interval'] != settings['display_interval']:
-                    print(f"Display interval: {new_settings['display_interval'] // 60} minutes")
-                if new_settings['sync_interval'] != settings['sync_interval']:
-                    print(f"Sync interval: {new_settings['sync_interval'] // 60} minutes")
-                if new_settings['shuffle'] != settings['shuffle']:
-                    print(f"Shuffle mode: {new_settings['shuffle']}")
-                if new_settings.get('search') != settings.get('search'):
-                    print(f"Search query updated: {new_settings.get('search', '(none)')}")
-                    settings_updated = True
-                settings.update(new_settings)
+        if not is_offline and current_time - last_settings_check >= settings_check_interval:
+            try:
+                settings_folder_id = get_or_create_settings_folder(service, folder_id)
+                # Ensure settings folders exist
+                ensure_default_settings_folders(service, settings_folder_id, settings)
+                # Get current settings
+                new_settings, _ = get_settings_from_folders(service, settings_folder_id, settings)
+                if new_settings != settings:
+                    print("\nSettings updated from Google Drive folders:")
+                    if new_settings['display_interval'] != settings['display_interval']:
+                        print(f"Display interval: {new_settings['display_interval'] // 60} minutes")
+                    if new_settings['sync_interval'] != settings['sync_interval']:
+                        print(f"Sync interval: {new_settings['sync_interval'] // 60} minutes")
+                    if new_settings['shuffle'] != settings['shuffle']:
+                        print(f"Shuffle mode: {new_settings['shuffle']}")
+                    if new_settings.get('search') != settings.get('search'):
+                        print(f"Search query updated: {new_settings.get('search', '(none)')}")
+                        settings_updated = True
+                    settings.update(new_settings)
+            except Exception as e:
+                print(f"\nError checking settings: {str(e)}")
+                print("Continuing with current settings...")
             last_settings_check = current_time
-
+            
         # Check for new photos on interval or if settings were updated
-        if settings_updated or current_time - last_sync_time >= settings['sync_interval']:
+        if not is_offline and (settings_updated or current_time - last_sync_time >= settings['sync_interval']):
             print("Checking for new photos...")
             new_photos, all_photos = sync_drive_images(service, folder_id, local_image_folder, settings)
             last_sync_time = current_time
