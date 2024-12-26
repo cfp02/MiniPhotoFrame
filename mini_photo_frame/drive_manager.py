@@ -416,6 +416,10 @@ def sync_drive_images(service, folder_id, local_folder, settings=None):
         # If we got here, we're online and have Drive photos
         if not drive_photos:
             logger.warning("No photos found in Google Drive. Using local photos.")
+            if shuffle_enabled:
+                local_photos_shuffled = local_photos.copy()
+                random.shuffle(local_photos_shuffled)
+                return [], local_photos_shuffled
             return [], local_photos
             
         # Download new photos
@@ -444,4 +448,10 @@ def sync_drive_images(service, folder_id, local_folder, settings=None):
         
     except Exception as e:
         logger.warning(f"Unable to sync with Drive ({str(e)}). Using local photos.")
+        # Check if shuffle is enabled in offline mode
+        shuffle_enabled = settings.get('shuffle', False) if settings else False
+        if shuffle_enabled:
+            local_photos_shuffled = local_photos.copy()
+            random.shuffle(local_photos_shuffled)
+            return [], local_photos_shuffled
         return [], local_photos
