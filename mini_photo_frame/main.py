@@ -219,6 +219,7 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
     current_index = 0
     photo_history = []
     photos_to_display = all_photos
+    already_shown = set()  # Track which photos have been shown
 
     while True:
         current_time = time.time()
@@ -242,6 +243,7 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
                 if new_settings.get('search') != settings.get('search'):
                     print(f"Search query updated: {new_settings.get('search', '(none)')}")
                     settings_updated = True
+                    already_shown.clear()  # Reset shown tracking on search change
                 settings.update(new_settings)
             last_settings_check = current_time
 
@@ -250,21 +252,35 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
             print("Checking for new photos...")
             new_photos, all_photos = sync_drive_images(service, folder_id, local_image_folder, settings)
             last_sync_time = current_time
-            if new_photos or settings_updated:
-                # If we have new photos or settings changed, update display list
-                photos_to_display = new_photos.copy() if new_photos else []
-                remaining_photos = [p for p in all_photos if p not in new_photos]
-                if settings['shuffle']:
-                    random.shuffle(remaining_photos)
-                photos_to_display.extend(remaining_photos)
+            if settings_updated:
+                # If settings changed, reset everything
+                photos_to_display = all_photos
                 current_index = 0
                 photo_history = []
-                continue
+                already_shown.clear()
+            elif new_photos:
+                # If just new photos, add them to the start but keep current position
+                remaining_display = photos_to_display[current_index:]  # Keep unshown photos
+                photos_to_display = new_photos + remaining_display
+                # Don't reset current_index - continue from where we were
 
         # Handle end of list
         if current_index >= len(photos_to_display):
             if settings['shuffle']:
-                random.shuffle(photos_to_display)
+                # When reshuffling, exclude photos we've already shown this cycle
+                unshown_photos = [p for p in all_photos if p not in already_shown]
+                if unshown_photos:
+                    random.shuffle(unshown_photos)
+                    photos_to_display = unshown_photos
+                else:
+                    # If all photos shown, start fresh
+                    already_shown.clear()
+                    photos_to_display = all_photos.copy()
+                    random.shuffle(photos_to_display)
+            else:
+                # For non-shuffle mode, just start over
+                photos_to_display = all_photos
+                already_shown.clear()
             current_index = 0
             photo_history = []
 
@@ -276,11 +292,13 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
             continue
             
         print(f"Showing photo: {photo_name}")
+        already_shown.add(photo_name)  # Mark this photo as shown
         action = show_photo(photo_path, settings['display_interval'])
         
         if action == "exit":
             return
         elif action == "reshuffle":
+            already_shown.clear()  # Reset on manual reshuffle
             random.shuffle(photos_to_display)
             current_index = 0
             photo_history = []
@@ -292,6 +310,8 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
         elif action == "back":
             if photo_history:
                 current_index = photo_history.pop()
+                if photos_to_display[current_index] in already_shown:
+                    already_shown.remove(photos_to_display[current_index])  # Allow reshowing on back
         else:  # "next" or any other key
             photo_history.append(current_index)
             if len(photo_history) > 50:  # Limit history size
@@ -305,9 +325,10 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
                 new_photos, _ = sync_drive_images(service, folder_id, local_image_folder, temp_settings)
                 last_sync_time = current_time
                 if new_photos:
-                    # Add new photos to the front but preserve the rest of the order
-                    photos_to_display = new_photos + [p for p in photos_to_display if p not in new_photos]
-                    current_index = 0  # Start showing new photos
+                    # Add new photos to the front but preserve the rest of the display queue
+                    remaining_display = photos_to_display[current_index:]  # Keep unshown photos
+                    photos_to_display = new_photos + remaining_display
+                    print(f"Added {len(new_photos)} new photos to the start of the queue")
 
 def main():
     # Load configuration
