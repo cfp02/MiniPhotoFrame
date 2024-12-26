@@ -27,17 +27,18 @@ def sync_drive_images(service, folder_id, local_folder):
     # Create a map of photo IDs to their full info
     drive_photo_ids = {photo['id']: photo for photo in drive_photos}
     
-    # Get set of all photo paths
-    drive_photo_paths = set()
+    # Get set of all photo paths (normalized)
+    drive_photo_paths = {photo['path'].replace('\\', '/') for photo in drive_photos}
     local_photos = {}  # Map of relative paths to full local paths
     
+    print("Scanning local files...")
     # Walk through local directory to build current state
     for root, _, files in os.walk(local_folder):
         for file in files:
             if file == ".gitkeep":
                 continue
-            # Get path relative to local_folder
-            rel_path = os.path.relpath(os.path.join(root, file), local_folder)
+            # Get path relative to local_folder and normalize it
+            rel_path = os.path.relpath(os.path.join(root, file), local_folder).replace('\\', '/')
             local_photos[rel_path] = os.path.join(root, file)
     
     # Track new photos for display priority
@@ -45,9 +46,8 @@ def sync_drive_images(service, folder_id, local_folder):
     
     # Process each photo from Drive
     for photo in drive_photos:
-        # Use the full path from Drive
-        rel_path = photo['path'].replace('\\', '/')  # Normalize path separators
-        drive_photo_paths.add(rel_path)
+        # Use the full path from Drive (normalized)
+        rel_path = photo['path'].replace('\\', '/')
         
         # Check if we need to download this photo
         if rel_path not in local_photos:
@@ -63,64 +63,26 @@ def sync_drive_images(service, folder_id, local_folder):
             new_photos.append(rel_path)
     
     # Remove local photos that no longer exist in Drive
-    for rel_path in set(local_photos.keys()) - drive_photo_paths:
-        os.remove(local_photos[rel_path])
-        print(f"Deleted extra local photo: {rel_path}")
-        # Remove empty directories
-        dir_path = os.path.dirname(local_photos[rel_path])
-        while dir_path != local_folder:
+    photos_to_delete = set(local_photos.keys()) - drive_photo_paths
+    if photos_to_delete:
+        print(f"\nRemoving {len(photos_to_delete)} photos that no longer exist in Drive:")
+        for rel_path in photos_to_delete:
+            print(f"  Deleting: {rel_path}")
             try:
-                os.rmdir(dir_path)
-                dir_path = os.path.dirname(dir_path)
-            except OSError:  # Directory not empty
-                break
+                os.remove(local_photos[rel_path])
+                # Remove empty directories
+                dir_path = os.path.dirname(local_photos[rel_path])
+                while dir_path != local_folder:
+                    try:
+                        os.rmdir(dir_path)
+                        dir_path = os.path.dirname(dir_path)
+                    except OSError:  # Directory not empty
+                        break
+            except Exception as e:
+                print(f"  Error deleting {rel_path}: {str(e)}")
     
     return new_photos, [photo['path'] for photo in drive_photos]
 
-def load_config():
-    config = {
-        'FOLDER_ID': None,
-        'DISPLAY_INTERVAL': 45 * 60,  # 45 minutes default
-        'SYNC_INTERVAL': 5 * 60,      # 5 minutes default
-        'SHUFFLE': True,              # Shuffle by default after showing new photos
-    }
-    
-    # Try to find config file in different locations
-    possible_paths = [
-        # Deployed mode: config.txt next to executable
-        os.path.join(get_base_path(), 'config.txt'),
-        # Development mode: config.txt in project root
-        os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'config.txt'),
-        # Fallback: config.txt in current directory
-        'config.txt'
-    ]
-    
-    config_path = None
-    for path in possible_paths:
-        if os.path.exists(path):
-            config_path = path
-            break
-    
-    if config_path:
-        print(f"Using config file: {config_path}")
-        with open(config_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    key, value = line.split('=', 1)
-                    config[key.strip()] = value.strip()
-        
-        # Convert values to appropriate types
-        config['DISPLAY_INTERVAL'] = int(config['DISPLAY_INTERVAL'])
-        config['SYNC_INTERVAL'] = int(config['SYNC_INTERVAL'])
-        if 'SHUFFLE' in config:
-            config['SHUFFLE'] = config['SHUFFLE'].lower() == 'true'
-    else:
-        print("\nNo config.txt found. Using default settings.")
-        if not is_frozen():
-            print("Development mode: Create a config.txt file in the project root.")
-    
-    return config
 
 def validate_images_path(path):
     """Validate and create images directory if needed"""
