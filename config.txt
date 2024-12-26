@@ -15,4 +15,12 @@ SYNC_INTERVAL=300
 
 # Whether to shuffle photos after showing new ones
 # Can be overridden by creating a folder named 'shuffle_true' or 'shuffle_false' in the settings folder
-SHUFFLE=true 
+SHUFFLE=true
+
+# Path to store downloaded images (optional)
+# If not specified, will use 'images' folder in the same directory as the executable
+# Examples:
+#   Windows: IMAGES_PATH=C:/PhotoFrame/images
+#   Mac/Linux: IMAGES_PATH=/Users/username/PhotoFrame/images
+#   Relative: IMAGES_PATH=../persistent_images
+IMAGES_PATH= 

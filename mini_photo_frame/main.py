@@ -23,28 +23,58 @@ def sync_drive_images(service, folder_id, local_folder):
 
     # Step 1: Get list of photos in Google Drive (sorted by creation time)
     drive_photos = list_photos(service, folder_id)
+    
+    # Create a map of photo IDs to their full info
     drive_photo_ids = {photo['id']: photo for photo in drive_photos}
-    drive_photo_names = set(photo['name'] for photo in drive_photos)
-
-    # Step 2: Get list of photos in the local folder
-    local_photo_names = set(os.listdir(local_folder))
-    if ".gitkeep" in local_photo_names:
-        local_photo_names.remove(".gitkeep")
-
-    # Step 3: Delete extra photos in the local folder
-    for local_photo in local_photo_names - drive_photo_names:
-        os.remove(os.path.join(local_folder, local_photo))
-        print(f"Deleted extra local photo: {local_photo}")
-
-    # Step 4: Download missing photos from Google Drive
+    
+    # Get set of all photo names with their relative paths
+    drive_photo_paths = set()
+    local_photos = {}  # Map of relative paths to full local paths
+    
+    # Walk through local directory to build current state
+    for root, _, files in os.walk(local_folder):
+        for file in files:
+            if file == ".gitkeep":
+                continue
+            # Get path relative to local_folder
+            rel_path = os.path.relpath(os.path.join(root, file), local_folder)
+            local_photos[rel_path] = os.path.join(root, file)
+    
+    # Track new photos for display priority
     new_photos = []
-    for photo_id, photo_info in drive_photo_ids.items():
-        photo_name = photo_info['name']
-        if photo_name not in local_photo_names:
-            download_photo(service, photo_id, os.path.join(local_folder, photo_name))
-            print(f"Downloaded new photo: {photo_name}")
-            new_photos.append(photo_name)
-
+    
+    # Process each photo from Drive
+    for photo in drive_photos:
+        # Create relative path based on original name
+        rel_path = photo['name']
+        drive_photo_paths.add(rel_path)
+        
+        # Check if we need to download this photo
+        if rel_path not in local_photos:
+            # Ensure the directory exists
+            photo_dir = os.path.dirname(os.path.join(local_folder, rel_path))
+            if photo_dir and not os.path.exists(photo_dir):
+                os.makedirs(photo_dir)
+                
+            # Download the photo
+            local_path = os.path.join(local_folder, rel_path)
+            download_photo(service, photo['id'], local_path)
+            print(f"Downloaded new photo: {rel_path}")
+            new_photos.append(rel_path)
+    
+    # Remove local photos that no longer exist in Drive
+    for rel_path in set(local_photos.keys()) - drive_photo_paths:
+        os.remove(local_photos[rel_path])
+        print(f"Deleted extra local photo: {rel_path}")
+        # Remove empty directories
+        dir_path = os.path.dirname(local_photos[rel_path])
+        while dir_path != local_folder:
+            try:
+                os.rmdir(dir_path)
+                dir_path = os.path.dirname(dir_path)
+            except OSError:  # Directory not empty
+                break
+    
     return new_photos, [photo['name'] for photo in drive_photos]
 
 def load_config():
@@ -92,14 +122,71 @@ def load_config():
     
     return config
 
-def get_images_path():
-    """Get the images directory path based on environment"""
+def validate_images_path(path):
+    """Validate and create images directory if needed"""
+    try:
+        # Expand user path and resolve any symlinks
+        path = os.path.realpath(os.path.expanduser(path))
+        
+        # Check if path exists
+        if os.path.exists(path):
+            if not os.path.isdir(path):
+                return False, f"Path exists but is not a directory: {path}"
+            # Check if we have write permission
+            if not os.access(path, os.W_OK):
+                return False, f"No write permission for directory: {path}"
+        else:
+            # Try to create the directory
+            try:
+                os.makedirs(path, exist_ok=True)
+            except Exception as e:
+                return False, f"Could not create directory {path}: {str(e)}"
+        
+        # Try to write a test file
+        test_file = os.path.join(path, '.write_test')
+        try:
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+        except Exception as e:
+            return False, f"Directory is not writable {path}: {str(e)}"
+            
+        return True, path
+    except Exception as e:
+        return False, f"Invalid path {path}: {str(e)}"
+
+def get_images_path(config):
+    """Get the images directory path based on configuration and environment"""
+    # Check if custom path is specified in config
+    if config.get('IMAGES_PATH'):
+        # Handle both absolute and relative paths
+        images_path = config['IMAGES_PATH']
+        if not os.path.isabs(images_path):
+            # Relative paths are relative to the executable/project root
+            images_path = os.path.join(get_base_path(), images_path)
+        
+        # Validate the custom path
+        is_valid, result = validate_images_path(images_path)
+        if not is_valid:
+            print(f"\nWarning: {result}")
+            print("Falling back to default images path...")
+        else:
+            return result
+    
+    # Default paths
     if is_frozen():
         # In deployed mode, images folder is next to the executable
-        return os.path.join(get_base_path(), 'images')
+        default_path = os.path.join(get_base_path(), 'images')
     else:
         # In development mode, images folder is in the project directory
-        return os.path.join(get_base_path(), 'mini_photo_frame', 'images')
+        default_path = os.path.join(get_base_path(), 'mini_photo_frame', 'images')
+    
+    # Validate default path
+    is_valid, result = validate_images_path(default_path)
+    if not is_valid:
+        raise RuntimeError(f"Could not create or access default images directory: {result}")
+    
+    return result
 
 def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
     """Run the picture frame with the given settings"""
@@ -208,7 +295,8 @@ def main():
         return
 
     # Get the correct images path
-    local_image_folder = get_images_path()
+    local_image_folder = get_images_path(config)
+    print(f"\nUsing images directory: {local_image_folder}")
     
     # Initialize service and settings
     creds = authenticate_google_drive()

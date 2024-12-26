@@ -17,16 +17,33 @@ def upload_photo(service, file_path, folder_id=None):
     return file.get('id')
 
 def list_photos(service, folder_id=None):
-    query = "mimeType='image/jpeg'"
-    if folder_id:
-        query += f" and '{folder_id}' in parents"
-    results = service.files().list(
-        q=query,
-        spaces='drive',
-        fields="nextPageToken, files(id, name, createdTime)",
-        orderBy="createdTime desc"
-    ).execute()
-    return results.get('files', [])
+    """List all photos in the given folder and its subfolders, excluding the settings folder"""
+    photos = []
+    
+    def get_items_in_folder(folder_id):
+        # Query for both images and folders in this directory
+        query = f"'{folder_id}' in parents and (mimeType='image/jpeg' or mimeType='application/vnd.google-apps.folder')"
+        results = service.files().list(
+            q=query,
+            spaces='drive',
+            fields="files(id, name, mimeType, createdTime)",
+            orderBy="createdTime desc"
+        ).execute()
+        return results.get('files', [])
+    
+    def process_folder(folder_id):
+        items = get_items_in_folder(folder_id)
+        for item in items:
+            # Skip the settings folder
+            if item['mimeType'] == 'application/vnd.google-apps.folder':
+                if item['name'].lower() != 'settings':
+                    process_folder(item['id'])
+            else:  # It's an image
+                photos.append(item)
+    
+    # Start the recursive process from the root folder
+    process_folder(folder_id)
+    return photos
 
 def download_photo(service, file_id, file_name):
     request = service.files().get_media(fileId=file_id)

@@ -7,7 +7,6 @@ def build_executable():
     # Get absolute paths
     base_dir = os.path.dirname(os.path.abspath(__file__))
     main_path = os.path.join(base_dir, 'mini_photo_frame', 'main.py')
-    images_path = os.path.join(base_dir, 'mini_photo_frame', 'images')
     deployment_path = os.path.join(base_dir, 'deployment')
     
     # Verify main.py exists
@@ -16,7 +15,6 @@ def build_executable():
         return
         
     print(f"Building from: {main_path}")
-    print(f"Images path: {images_path}")
     print(f"Deployment path: {deployment_path}")
     
     # Get the correct extension for the executable based on the platform
@@ -24,16 +22,25 @@ def build_executable():
     
     # Create deployment directory structure
     if os.path.exists(deployment_path):
-        shutil.rmtree(deployment_path)
-    os.makedirs(deployment_path)
-    os.makedirs(os.path.join(deployment_path, 'service_account'))
+        # Don't delete the entire deployment folder, just clean up non-essential files
+        for item in os.listdir(deployment_path):
+            item_path = os.path.join(deployment_path, item)
+            if item != 'images' and item != 'service_account':  # Preserve these directories
+                if os.path.isfile(item_path):
+                    os.remove(item_path)
+                elif os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+    else:
+        os.makedirs(deployment_path)
+    
+    # Ensure service_account directory exists
+    os.makedirs(os.path.join(deployment_path, 'service_account'), exist_ok=True)
     
     # PyInstaller configuration
     PyInstaller.__main__.run([
         main_path,
         '--onefile',
         '--name=photo_frame',
-        f'--add-data={images_path}:images',
         f'--distpath={deployment_path}',
         '--clean',
     ])
@@ -46,22 +53,27 @@ Setup Instructions:
 1. Copy this entire folder to your target machine
 2. Place your Google Drive service account JSON file in the 'service_account' folder
 3. Edit config.txt to set your Google Drive folder ID
-4. Run the photo_frame{exe_extension} executable
+4. (Optional) Set IMAGES_PATH in config.txt for persistent storage
+5. Run the photo_frame{exe_extension} executable
 
 Configuration:
 1. Local config.txt file (basic settings):
    - Display interval: 45 minutes per photo
    - Sync interval: Checks for new photos every 5 minutes
    - Shuffle mode: On by default
+   - Images path: Where to store downloaded photos
 
 2. Google Drive settings (dynamic settings):
    The program will create a 'settings' folder in your Google Drive where
    you can change settings by creating/renaming folders:
-   - display_interval_45 (changes display time to 45 minutes)
-   - sync_interval_5 (changes sync interval to 5 minutes)
+   - display_interval_mins_45 (changes display time to 45 minutes)
+   - sync_interval_mins_5 (changes sync interval to 5 minutes)
    - shuffle_true/shuffle_false (enables/disables shuffle)
 
-Note: Google Drive settings override local config.txt settings.
+Note: 
+- Google Drive settings override local config.txt settings
+- Set IMAGES_PATH in config.txt to keep photos between updates
+- Default storage is in the 'images' folder next to the executable
 """)
 
     # Create config file
@@ -74,16 +86,24 @@ Note: Google Drive settings override local config.txt settings.
 FOLDER_ID=your_google_drive_folder_id_here
 
 # Display interval in seconds (45 minutes default)
-# Can be overridden by creating a folder named 'display_interval_45' in the settings folder
+# Can be overridden by creating a folder named 'display_interval_mins_45' in the settings folder
 DISPLAY_INTERVAL=2700
 
 # Sync interval in seconds (5 minutes default)
-# Can be overridden by creating a folder named 'sync_interval_5' in the settings folder
+# Can be overridden by creating a folder named 'sync_interval_mins_5' in the settings folder
 SYNC_INTERVAL=300
 
 # Whether to shuffle photos after showing new ones
 # Can be overridden by creating a folder named 'shuffle_true' or 'shuffle_false' in the settings folder
-SHUFFLE=true""")
+SHUFFLE=true
+
+# Path to store downloaded images (optional)
+# If not specified, will use 'images' folder in the same directory as the executable
+# Examples:
+#   Windows: IMAGES_PATH=C:/PhotoFrame/images
+#   Mac/Linux: IMAGES_PATH=/Users/username/PhotoFrame/images
+#   Relative: IMAGES_PATH=../persistent_images
+IMAGES_PATH=""")
 
     print(f"""
 Deployment package created successfully!
@@ -92,7 +112,8 @@ To deploy:
 1. Copy the entire 'deployment' folder to your target machine
 2. Place your service account JSON file in the 'deployment/service_account' folder
 3. Edit 'deployment/config.txt' to set your Google Drive folder ID
-4. Run 'deployment/photo_frame{exe_extension}'
+4. (Optional) Set IMAGES_PATH in config.txt for persistent storage
+5. Run 'deployment/photo_frame{exe_extension}'
 """)
 
 if __name__ == "__main__":
