@@ -44,7 +44,8 @@ def get_caption(image_path):
 
 def get_display_image(image_path):
     """Prepare image for display with caption"""
-    image_height = 1200  # Target height for portrait images
+    target_width = 1800   # Fixed width for landscape
+    target_height = 1200  # Fixed height
     
     # Read and process image
     img = cv2.imread(image_path)
@@ -52,10 +53,18 @@ def get_display_image(image_path):
         print(f"Error loading image: {image_path}")
         return None
         
-    # Scale image
-    if img.shape[0] > img.shape[1]:  # Portrait orientation
-        scale = image_height / img.shape[0]
-        img = cv2.resize(img, (int(img.shape[1]*scale), image_height))
+    # Scale image to target dimensions
+    img_height, img_width = img.shape[:2]
+    img_aspect_ratio = img_width / img_height
+    
+    if img_height > img_width:  # Portrait
+        new_height = target_height
+        new_width = int(target_height * img_aspect_ratio)
+    else:  # Landscape
+        new_width = target_width
+        new_height = target_height
+        
+    img = cv2.resize(img, (new_width, new_height))
     
     # Add caption
     caption = get_caption(image_path)
@@ -93,11 +102,10 @@ def show_photo(image_path, display_interval):
     screen_width = screen.width
     screen_height = screen.height
     
-    # Calculate padding to center image
-    image_height = img.shape[0]
-    image_width = img.shape[1]
-    image_ratio = screen_height / image_height
-    lr_padding = int((screen_width - image_width * image_ratio) / 2)
+    # Calculate padding to match original implementation
+    image_height = img.shape[0]  # Should be 1200
+    image_width = img.shape[1]   # Should be 1800 for landscape
+    lr_padding = int((screen_width - image_width) / 2) + 17  # Added the +17 adjustment
     
     # Add padding
     img = cv2.copyMakeBorder(
@@ -106,7 +114,8 @@ def show_photo(image_path, display_interval):
         bottom=0,
         left=lr_padding,
         right=lr_padding,
-        borderType=cv2.BORDER_CONSTANT
+        borderType=cv2.BORDER_CONSTANT,
+        value=[0, 0, 0]  # Black borders
     )
     
     # Display in fullscreen
