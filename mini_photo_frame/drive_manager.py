@@ -48,10 +48,13 @@ def sanitize_path(name):
     # but keep spaces and periods as they're handled fine by os.path
     return name
 
-def list_photos(service, folder_id=None):
+def list_photos(service, folder_id=None, search_query=None):
     """List all photos in the given folder and its subfolders, excluding the settings folder"""
     logger.info(f"Listing photos from folder ID: {folder_id}")
+    if search_query:
+        logger.info(f"Active search query: '{search_query}'")
     photos = []
+    search_matches = []  # Track photos that match the search query
     
     def get_items_in_folder(folder_id):
         logger.debug(f"Fetching items from folder: {folder_id}")
@@ -64,10 +67,10 @@ def list_photos(service, folder_id=None):
                 results = service.files().list(
                     q=query,
                     spaces='drive',
-                    fields="nextPageToken, files(id, name, mimeType, createdTime)",
+                    fields="nextPageToken, files(id, name, mimeType, createdTime, description)",
                     orderBy="createdTime desc",
                     pageToken=page_token,
-                    pageSize=1000  # Maximum allowed page size
+                    pageSize=1000
                 ).execute()
                 
                 batch_items = results.get('files', [])
@@ -92,7 +95,6 @@ def list_photos(service, folder_id=None):
             if item['mimeType'] == 'application/vnd.google-apps.folder':
                 if item['name'].lower() != 'settings':
                     logger.debug(f"Processing subfolder: {safe_name}")
-                    # For folders, just append the folder name to the current path
                     subfolder_path = os.path.join(current_path, safe_name) if current_path else safe_name
                     process_folder(item['id'], subfolder_path)
                 else:
@@ -101,11 +103,32 @@ def list_photos(service, folder_id=None):
                 # Store both the full path and the filename separately
                 item['filename'] = safe_name
                 item['path'] = os.path.join(current_path, safe_name) if current_path else safe_name
-                item['directory'] = current_path  # Store the directory path separately
+                item['directory'] = current_path
+                
+                # Check if photo matches search query
+                if search_query:
+                    description = item.get('description', '').lower()
+                    name = item['name'].lower()
+                    path = item['path'].lower()
+                    if (search_query in description) or (search_query in name) or (search_query in path):
+                        logger.info(f"Search match found: '{search_query}' in {item['path']}")
+                        search_matches.append(item)
+                
                 logger.debug(f"Found photo: {item['path']}")
                 photos.append(item)
     
     process_folder(folder_id)
+    
+    # If there's a search query, prioritize matching photos
+    if search_query and search_matches:
+        # Remove matching photos from main list to avoid duplicates
+        photos = [p for p in photos if p not in search_matches]
+        # Add matching photos at the beginning
+        photos = search_matches + photos
+        logger.info(f"Search results: {len(search_matches)} photos match '{search_query}', reordering them to show first")
+    elif search_query:
+        logger.info(f"No photos found matching search query: '{search_query}'")
+    
     logger.info(f"Found total of {len(photos)} photos")
     return photos
 
@@ -210,6 +233,7 @@ def get_settings_from_folders(service, settings_folder_id, default_settings):
         logger.info(f"Found {len(folders)} settings folders")
         
         found_settings = set()
+        has_search = False  # Track if we find a search folder
         
         for folder in folders:
             name = folder['name'].lower()
@@ -228,6 +252,14 @@ def get_settings_from_folders(service, settings_folder_id, default_settings):
                     settings['shuffle'] = name.split('_')[-1].lower() == 'true'
                     found_settings.add('shuffle')
                     logger.debug(f"Found shuffle setting: {settings['shuffle']}")
+                elif name.startswith('search_'):
+                    # Extract search query from folder name
+                    search_query = name[7:]  # Remove 'search_' prefix
+                    if search_query:  # Only set if not empty
+                        settings['search'] = search_query
+                        found_settings.add('search')
+                        has_search = True
+                        logger.info(f"Found search setting: '{search_query}'")
                 elif name.startswith('filter_'):
                     settings['filter'] = name[7:]
                     found_settings.add('filter')
@@ -235,6 +267,10 @@ def get_settings_from_folders(service, settings_folder_id, default_settings):
             except ValueError as e:
                 logger.warning(f"Invalid setting folder name: {name} - {str(e)}")
                 continue
+        
+        if not has_search and 'search' in settings:
+            logger.info("Search folder removed, clearing search setting")
+            settings.pop('search', None)
         
         logger.info("Finished reading settings")
         logger.debug(f"Final settings: {settings}")

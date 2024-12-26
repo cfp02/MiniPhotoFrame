@@ -61,14 +61,15 @@ def load_config():
     
     return config
 
-def sync_drive_images(service, folder_id, local_folder):
+def sync_drive_images(service, folder_id, local_folder, settings=None):
     """Syncs images and returns a list of any new photos downloaded"""
     # Ensure the local folder exists
     if not os.path.exists(local_folder):
         os.makedirs(local_folder)
 
     # Step 1: Get list of photos in Google Drive (sorted by creation time)
-    drive_photos = list_photos(service, folder_id)
+    search_query = settings.get('search', '').lower() if settings else None
+    drive_photos = list_photos(service, folder_id, search_query)
     
     # Create a map of photo IDs to their full info
     drive_photo_ids = {photo['id']: photo for photo in drive_photos}
@@ -199,7 +200,7 @@ def get_images_path(config):
 def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
     """Run the picture frame with the given settings"""
     # Initial sync
-    new_photos, all_photos = sync_drive_images(service, folder_id, local_image_folder)
+    new_photos, all_photos = sync_drive_images(service, folder_id, local_image_folder, settings)
     last_sync_time = time.time()
     last_settings_check = time.time()
     settings_check_interval = 60  # Check settings every minute
@@ -232,7 +233,7 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
         # Check for new photos
         if current_time - last_sync_time >= settings['sync_interval']:
             print("Checking for new photos...")
-            new_photos, all_photos = sync_drive_images(service, folder_id, local_image_folder)
+            new_photos, all_photos = sync_drive_images(service, folder_id, local_image_folder, settings)
             last_sync_time = current_time
 
         # Prepare photo list
@@ -290,7 +291,7 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
             current_time = time.time()
             if current_time - last_sync_time >= settings['sync_interval']:
                 print("Checking for new photos...")
-                new_photos, all_photos = sync_drive_images(service, folder_id, local_image_folder)
+                new_photos, all_photos = sync_drive_images(service, folder_id, local_image_folder, settings)
                 last_sync_time = current_time
                 if new_photos:
                     break
