@@ -56,15 +56,29 @@ def list_photos(service, folder_id=None):
     def get_items_in_folder(folder_id):
         logger.debug(f"Fetching items from folder: {folder_id}")
         query = f"'{folder_id}' in parents and (mimeType='image/jpeg' or mimeType='application/vnd.google-apps.folder')"
+        items = []
+        page_token = None
+        
         try:
-            results = service.files().list(
-                q=query,
-                spaces='drive',
-                fields="files(id, name, mimeType, createdTime)",
-                orderBy="createdTime desc"
-            ).execute()
-            items = results.get('files', [])
-            logger.debug(f"Found {len(items)} items in folder {folder_id}")
+            while True:
+                results = service.files().list(
+                    q=query,
+                    spaces='drive',
+                    fields="nextPageToken, files(id, name, mimeType, createdTime)",
+                    orderBy="createdTime desc",
+                    pageToken=page_token,
+                    pageSize=1000  # Maximum allowed page size
+                ).execute()
+                
+                batch_items = results.get('files', [])
+                items.extend(batch_items)
+                logger.debug(f"Fetched {len(batch_items)} items in this batch")
+                
+                page_token = results.get('nextPageToken')
+                if not page_token:
+                    break
+                
+            logger.debug(f"Found total of {len(items)} items in folder {folder_id}")
             return items
         except Exception as e:
             logger.error(f"Error fetching items from folder {folder_id}: {str(e)}")
