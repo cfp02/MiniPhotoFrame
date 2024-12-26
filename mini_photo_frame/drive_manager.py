@@ -65,15 +65,33 @@ def list_photos(service, folder_id=None):
     return photos
 
 def download_photo(service, photo, local_path):
-    """Download a photo from Drive to local storage"""
+    """Download a photo from Drive to local storage
+    
+    Args:
+        service: Google Drive service instance
+        photo: Either a dict with 'id', 'name', and 'path' keys, or a string file ID
+        local_path: Base path where to store the downloaded file
+    """
     try:
+        # Handle case where photo is just a file ID string
+        if isinstance(photo, str):
+            file_id = photo
+            file_metadata = service.files().get(fileId=file_id, fields='name').execute()
+            file_name = file_metadata['name']
+            file_path = os.path.join(local_path, sanitize_path(file_name))
+        else:
+            # Ensure photo has required fields
+            if not all(key in photo for key in ['id', 'path']):
+                raise ValueError("Photo dict missing required fields ('id', 'path')")
+            file_id = photo['id']
+            file_path = os.path.join(local_path, photo['path'])
+
         # Ensure the directory exists
-        photo_dir = os.path.dirname(os.path.join(local_path, photo['path']))
+        photo_dir = os.path.dirname(file_path)
         os.makedirs(photo_dir, exist_ok=True)
         
         # Download the file
-        request = service.files().get_media(fileId=photo['id'])
-        file_path = os.path.join(local_path, photo['path'])
+        request = service.files().get_media(fileId=file_id)
         
         # Stream the file to disk
         with io.BytesIO() as fh:
@@ -89,7 +107,7 @@ def download_photo(service, photo, local_path):
         
         return file_path
     except Exception as e:
-        logger.error(f"Error downloading photo {photo['name']}: {str(e)}")
+        logger.error(f"Error downloading photo: {str(e)}")
         return None
 
 def create_folder(service, folder_name, parent_id=None):
