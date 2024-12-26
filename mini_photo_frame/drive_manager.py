@@ -365,9 +365,105 @@ def sync_drive_images(service, folder_id, local_folder, settings=None):
                 if file != ".gitkeep":
                     rel_path = os.path.relpath(os.path.join(root, file), local_folder).replace('\\', '/')
                     local_photos.append(rel_path)
-        return [], local_photos
+        return [], sorted(local_photos)  # Sort to maintain consistent order
 
     # Online mode - proceed with normal sync
-    # Ensure the local folder exists
-    if not os.path.exists(local_folder):
-        os.makedirs(local_folder)
+    try:
+        # Ensure the local folder exists
+        if not os.path.exists(local_folder):
+            os.makedirs(local_folder)
+
+        # Step 1: Get list of photos in Google Drive (sorted by creation time)
+        search_query = settings.get('search', '').lower() if settings else None
+        shuffle_enabled = settings.get('shuffle', False) if settings else False
+        drive_photos = list_photos(service, folder_id, search_query, shuffle_enabled)
+        
+        if not drive_photos:
+            logger.warning("No photos found in Google Drive or unable to fetch list. Preserving local photos.")
+            # If we can't get the drive photos list, just return local photos without deleting anything
+            local_photos = []
+            for root, _, files in os.walk(local_folder):
+                for file in files:
+                    if file != ".gitkeep":
+                        rel_path = os.path.relpath(os.path.join(root, file), local_folder).replace('\\', '/')
+                        local_photos.append(rel_path)
+            return [], sorted(local_photos)
+        
+        # Create a map of photo IDs to their full info
+        drive_photo_ids = {photo['id']: photo for photo in drive_photos}
+        
+        # Get set of all photo paths (normalized)
+        drive_photo_paths = {photo['path'].replace('\\', '/') for photo in drive_photos}
+        local_photos = {}  # Map of relative paths to full local paths
+        
+        logger.info("Scanning local files...")
+        # Walk through local directory to build current state
+        for root, _, files in os.walk(local_folder):
+            for file in files:
+                if file == ".gitkeep":
+                    continue
+                # Get path relative to local_folder and normalize it
+                rel_path = os.path.relpath(os.path.join(root, file), local_folder).replace('\\', '/')
+                local_photos[rel_path] = os.path.join(root, file)
+        
+        # Track new photos for display priority
+        new_photos = []
+        
+        # Process each photo from Drive
+        for photo in drive_photos:
+            # Use the full path from Drive (normalized)
+            rel_path = photo['path'].replace('\\', '/')
+            
+            # Check if we need to download this photo
+            if rel_path not in local_photos:
+                # Ensure the directory exists
+                photo_dir = os.path.dirname(os.path.join(local_folder, rel_path))
+                if photo_dir and not os.path.exists(photo_dir):
+                    os.makedirs(photo_dir)
+                    
+                # Download the photo
+                local_path = os.path.join(local_folder, rel_path)
+                download_photo(service, photo['id'], local_path)
+                logger.info(f"Downloaded new photo: {rel_path}")
+                new_photos.append(rel_path)
+        
+        # Only remove local photos if we successfully got the drive photos list
+        photos_to_delete = set(local_photos.keys()) - drive_photo_paths
+        if photos_to_delete:
+            logger.info(f"\nRemoving {len(photos_to_delete)} photos that no longer exist in Drive:")
+            for rel_path in photos_to_delete:
+                logger.info(f"  Deleting: {rel_path}")
+                try:
+                    os.remove(local_photos[rel_path])
+                    # Remove empty directories
+                    dir_path = os.path.dirname(local_photos[rel_path])
+                    while dir_path != local_folder:
+                        try:
+                            os.rmdir(dir_path)
+                            dir_path = os.path.dirname(dir_path)
+                        except OSError:  # Directory not empty
+                            break
+                except Exception as e:
+                    logger.error(f"  Error deleting {rel_path}: {str(e)}")
+        
+        # Return paths for all photos, with new ones first
+        all_paths = [p['path'] for p in drive_photos]
+        if new_photos:
+            # Remove new photos from all_paths to avoid duplicates
+            all_paths = [p for p in all_paths if p not in new_photos]
+            # Add new photos at the start
+            all_paths = new_photos + all_paths
+        
+        return new_photos, all_paths
+        
+    except Exception as e:
+        logger.error(f"Error during sync: {str(e)}")
+        logger.warning("Falling back to local photos only")
+        # If anything goes wrong, just return local photos without deleting anything
+        local_photos = []
+        for root, _, files in os.walk(local_folder):
+            for file in files:
+                if file != ".gitkeep":
+                    rel_path = os.path.relpath(os.path.join(root, file), local_folder).replace('\\', '/')
+                    local_photos.append(rel_path)
+        return [], sorted(local_photos)
