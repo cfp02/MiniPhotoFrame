@@ -373,12 +373,14 @@ def main():
     local_image_folder = get_images_path(config)
     print(f"\nUsing images directory: {local_image_folder}")
     
-    # Initialize service and settings
+    # Initialize credentials and service regardless of internet status
     creds = authenticate_google_drive()
     if not creds:
         return
         
     service = create_drive_service(creds)
+    if not service:
+        return
     
     # Convert config to settings format
     settings = {
@@ -387,6 +389,33 @@ def main():
         'shuffle': config.get('SHUFFLE', True),
         'filter': None
     }
+    
+    # Check internet connectivity
+    if not check_internet_connection():
+        print("\nNo internet connection detected. Starting in offline mode...")
+        # Get list of local photos
+        local_photos = []
+        for root, _, files in os.walk(local_image_folder):
+            for file in files:
+                if file != ".gitkeep":
+                    rel_path = os.path.relpath(os.path.join(root, file), local_image_folder).replace('\\', '/')
+                    local_photos.append(rel_path)
+        
+        if not local_photos:
+            print("\nNo local photos found. Please ensure there are photos in the images directory.")
+            return
+            
+        print(f"\nFound {len(local_photos)} local photos.")
+        print("\nStarting photo frame with default settings:")
+        print(f"Display interval: {settings['display_interval'] // 60} minutes")
+        print(f"Shuffle mode: {settings['shuffle']}")
+        
+        # Start the photo frame with the service object (so it can recover when internet returns)
+        run_digital_picture_frame(config['FOLDER_ID'], local_image_folder, service, settings)
+        return
+    
+    # Online mode - proceed with normal startup
+    print("\nInternet connection available. Starting in online mode...")
     
     # Set up settings folders in Google Drive
     settings_folder_id = get_or_create_settings_folder(service, config['FOLDER_ID'])
