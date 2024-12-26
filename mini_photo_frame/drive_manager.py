@@ -50,16 +50,55 @@ def sanitize_path(name):
     # but keep spaces and periods as they're handled fine by os.path
     return name
 
+def get_local_photos(local_folder):
+    """Get list of local photos and their paths"""
+    local_photos = []
+    local_photos_map = {}
+    for root, _, files in os.walk(local_folder):
+        for file in files:
+            if file != ".gitkeep":
+                rel_path = os.path.relpath(os.path.join(root, file), local_folder).replace('\\', '/')
+                local_photos.append(rel_path)
+                local_photos_map[rel_path] = os.path.join(root, file)
+    return sorted(local_photos), local_photos_map
+
+def needs_download(photo, local_photos):
+    """Check if a photo needs to be downloaded"""
+    return photo['path'].replace('\\', '/') not in local_photos
+
+def cleanup_deleted_photos(local_photos_map, drive_photos, local_folder):
+    """Remove local photos that no longer exist in Drive"""
+    drive_photo_paths = {photo['path'].replace('\\', '/') for photo in drive_photos}
+    photos_to_delete = set(local_photos_map.keys()) - drive_photo_paths
+    
+    if photos_to_delete:
+        logger.info(f"\nRemoving {len(photos_to_delete)} photos that no longer exist in Drive:")
+        for rel_path in photos_to_delete:
+            logger.info(f"  Deleting: {rel_path}")
+            try:
+                os.remove(local_photos_map[rel_path])
+                # Remove empty directories
+                dir_path = os.path.dirname(local_photos_map[rel_path])
+                while dir_path != local_folder:
+                    try:
+                        os.rmdir(dir_path)
+                        dir_path = os.path.dirname(dir_path)
+                    except OSError:  # Directory not empty
+                        break
+            except Exception as e:
+                logger.error(f"  Error deleting {rel_path}: {str(e)}")
+
 def list_photos(service, folder_id=None, search_query=None, shuffle_enabled=False):
-    """List all photos in the given folder and its subfolders, excluding the settings folder"""
+    """List all photos in the given folder and its subfolders"""
+    logger.info(f"Listing photos from folder ID: {folder_id}")
+    if search_query:
+        logger.info(f"Active search query: '{search_query}'")
+    
     # First check internet connection
     if not check_internet_connection():
         logger.warning("No internet connection available. Cannot list photos from Drive.")
         return None  # Return None instead of empty list to indicate connection failure
     
-    logger.info(f"Listing photos from folder ID: {folder_id}")
-    if search_query:
-        logger.info(f"Active search query: '{search_query}'")
     photos = []
     search_matches = []  # Track photos that match the search query
     
@@ -360,78 +399,40 @@ def check_internet_connection():
 
 def sync_drive_images(service, folder_id, local_folder, settings=None):
     """Syncs images and returns a list of any new photos downloaded"""
-    # First ensure the local folder exists
+    # 1. First get local photos (we need this regardless of online/offline)
+    local_photos, local_photos_map = get_local_photos(local_folder)
+    
+    # Ensure the local folder exists
     if not os.path.exists(local_folder):
         os.makedirs(local_folder)
-
-    # Get current local photos
-    local_photos = []
-    local_photos_map = {}
-    for root, _, files in os.walk(local_folder):
-        for file in files:
-            if file != ".gitkeep":
-                rel_path = os.path.relpath(os.path.join(root, file), local_folder).replace('\\', '/')
-                local_photos.append(rel_path)
-                local_photos_map[rel_path] = os.path.join(root, file)
-
-    # Check for offline mode or no internet
-    if service is None or not check_internet_connection():
-        logger.warning("Operating in offline mode. Using local photos only.")
-        return [], sorted(local_photos)
-
-    # Online mode - proceed with sync
+    
+    # 2. Try to get Drive photos, handle failure gracefully
     try:
-        # Try to get Drive photos
+        # Attempt to get Drive photos
         search_query = settings.get('search', '').lower() if settings else None
         shuffle_enabled = settings.get('shuffle', False) if settings else False
         drive_photos = list_photos(service, folder_id, search_query, shuffle_enabled)
         
-        # If list_photos returns None or empty list, preserve local photos
-        if drive_photos is None or not drive_photos:
-            if drive_photos is None:
-                logger.warning("Could not connect to Google Drive. Preserving local photos.")
-            else:
-                logger.warning("No photos found in Google Drive. Preserving local photos.")
-            return [], sorted(local_photos)
-        
-        # Get set of all photo paths from Drive
-        drive_photo_paths = {photo['path'].replace('\\', '/') for photo in drive_photos}
-        
-        # Track new photos for display priority
+        # If we got here, we're online and have Drive photos
+        if not drive_photos:
+            logger.warning("No photos found in Google Drive. Using local photos.")
+            return [], local_photos
+            
+        # Download new photos
         new_photos = []
-        
-        # Process each photo from Drive
         for photo in drive_photos:
-            rel_path = photo['path'].replace('\\', '/')
-            if rel_path not in local_photos_map:
-                # Download new photo
-                photo_dir = os.path.dirname(os.path.join(local_folder, rel_path))
+            if needs_download(photo, local_photos):
+                photo_dir = os.path.dirname(os.path.join(local_folder, photo['path']))
                 if photo_dir and not os.path.exists(photo_dir):
                     os.makedirs(photo_dir)
                 
-                local_path = os.path.join(local_folder, rel_path)
-                if download_photo(service, photo['id'], local_path):
-                    logger.info(f"Downloaded new photo: {rel_path}")
-                    new_photos.append(rel_path)
+                local_path = os.path.join(local_folder, photo['path'])
+                if download_photo(service, photo, local_path):
+                    logger.info(f"Downloaded new photo: {photo['path']}")
+                    new_photos.append(photo['path'])
         
-        # Only remove local photos if we have a valid Drive photo list
-        photos_to_delete = set(local_photos_map.keys()) - drive_photo_paths
-        if photos_to_delete:
-            logger.info(f"\nRemoving {len(photos_to_delete)} photos that no longer exist in Drive:")
-            for rel_path in photos_to_delete:
-                logger.info(f"  Deleting: {rel_path}")
-                try:
-                    os.remove(local_photos_map[rel_path])
-                    # Remove empty directories
-                    dir_path = os.path.dirname(local_photos_map[rel_path])
-                    while dir_path != local_folder:
-                        try:
-                            os.rmdir(dir_path)
-                            dir_path = os.path.dirname(dir_path)
-                        except OSError:  # Directory not empty
-                            break
-                except Exception as e:
-                    logger.error(f"  Error deleting {rel_path}: {str(e)}")
+        # Clean up deleted photos
+        cleanup_deleted_photos(local_photos_map, drive_photos, local_folder)
         
         # Return paths for all photos, with new ones first
         all_paths = [p['path'] for p in drive_photos]
@@ -442,6 +443,5 @@ def sync_drive_images(service, folder_id, local_folder, settings=None):
         return new_photos, all_paths
         
     except Exception as e:
-        logger.error(f"Error during sync: {str(e)}")
-        logger.warning("Error occurred during sync. Preserving local photos.")
-        return [], sorted(local_photos)
+        logger.warning(f"Unable to sync with Drive ({str(e)}). Using local photos.")
+        return [], local_photos
