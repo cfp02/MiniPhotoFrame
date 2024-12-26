@@ -1,8 +1,13 @@
 # drive_manager.py
 import os
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 import googleapiclient.http
+import io
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 def create_drive_service(creds):
     return build('drive', 'v3', credentials=creds)
@@ -15,6 +20,14 @@ def upload_photo(service, file_path, folder_id=None):
     file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
     print(f'Uploaded file with ID: {file.get("id")}')
     return file.get('id')
+
+def sanitize_path(name):
+    """Sanitize folder/file names to be safe for filesystem"""
+    # Replace slashes with underscores to prevent path manipulation
+    name = name.replace('/', '_').replace('\\', '_')
+    # Replace any other potentially problematic characters
+    # but keep spaces and periods as they're handled fine by os.path
+    return name
 
 def list_photos(service, folder_id=None):
     """List all photos in the given folder and its subfolders, excluding the settings folder"""
@@ -34,28 +47,50 @@ def list_photos(service, folder_id=None):
     def process_folder(folder_id, current_path=""):
         items = get_items_in_folder(folder_id)
         for item in items:
+            # Sanitize the item name
+            safe_name = sanitize_path(item['name'])
+            
             if item['mimeType'] == 'application/vnd.google-apps.folder':
                 if item['name'].lower() != 'settings':
                     # Recursively process subfolders with updated path
-                    subfolder_path = os.path.join(current_path, item['name'])
+                    subfolder_path = os.path.join(current_path, safe_name)
                     process_folder(item['id'], subfolder_path)
             else:  # It's an image
                 # Add path information to the photo
-                item['path'] = os.path.join(current_path, item['name'])
+                item['path'] = os.path.join(current_path, safe_name)
                 photos.append(item)
     
     # Start the recursive process from the root folder
     process_folder(folder_id)
     return photos
 
-def download_photo(service, file_id, file_name):
-    request = service.files().get_media(fileId=file_id)
-    with open(file_name, 'wb') as file:
-        downloader = googleapiclient.http.MediaIoBaseDownload(file, request)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-            print(f"Download {int(status.progress() * 100)}%.")
+def download_photo(service, photo, local_path):
+    """Download a photo from Drive to local storage"""
+    try:
+        # Ensure the directory exists
+        photo_dir = os.path.dirname(os.path.join(local_path, photo['path']))
+        os.makedirs(photo_dir, exist_ok=True)
+        
+        # Download the file
+        request = service.files().get_media(fileId=photo['id'])
+        file_path = os.path.join(local_path, photo['path'])
+        
+        # Stream the file to disk
+        with io.BytesIO() as fh:
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while done is False:
+                status, done = downloader.next_chunk()
+            fh.seek(0)
+            
+            # Save the file
+            with open(file_path, 'wb') as f:
+                f.write(fh.read())
+        
+        return file_path
+    except Exception as e:
+        logger.error(f"Error downloading photo {photo['name']}: {str(e)}")
+        return None
 
 def create_folder(service, folder_name, parent_id=None):
     file_metadata = {
