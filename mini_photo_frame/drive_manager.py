@@ -113,7 +113,7 @@ def download_photo(service, photo, local_path):
             
             file_id = photo['id']
             # Use the path directly as it's already properly constructed
-            file_path = os.path.join(local_path, photo['path'])
+            file_path = local_path # os.path.join(local_path, photo['path'])
             logger.info(f"Downloading photo to: {file_path} (ID: {file_id})")
 
         # Create the directory structure if needed
