@@ -14,6 +14,7 @@ from drive_manager import (
 )
 from display_manager import show_photo
 from datetime import datetime, timedelta
+import logging
 
 def load_config():
     """Load configuration from config.txt file"""
@@ -22,6 +23,7 @@ def load_config():
         'DISPLAY_INTERVAL': 45 * 60,  # 45 minutes default
         'SYNC_INTERVAL': 5 * 60,      # 5 minutes default
         'SHUFFLE': True,              # Shuffle by default after showing new photos
+        'LOG_LEVEL': 'INFO',          # Default logging level
     }
     
     # Try to find config file in different locations
@@ -54,6 +56,13 @@ def load_config():
         config['SYNC_INTERVAL'] = int(config['SYNC_INTERVAL'])
         if 'SHUFFLE' in config:
             config['SHUFFLE'] = config['SHUFFLE'].lower() == 'true'
+        
+        # Set logging level
+        if 'LOG_LEVEL' in config:
+            log_level = config['LOG_LEVEL'].upper()
+            if log_level in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
+                logging.getLogger().setLevel(getattr(logging, log_level))
+                print(f"Setting log level to: {log_level}")
     else:
         print("\nNo config.txt found. Using default settings.")
         if not is_frozen():
@@ -209,9 +218,11 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
     # Track current position for back functionality
     current_index = 0
     photo_history = []
+    photos_to_display = all_photos
 
     while True:
         current_time = time.time()
+        settings_updated = False
         
         # Check for settings updates periodically
         if current_time - last_settings_check >= settings_check_interval:
@@ -228,74 +239,75 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
                     print(f"Sync interval: {new_settings['sync_interval'] // 60} minutes")
                 if new_settings['shuffle'] != settings['shuffle']:
                     print(f"Shuffle mode: {new_settings['shuffle']}")
+                if new_settings.get('search') != settings.get('search'):
+                    print(f"Search query updated: {new_settings.get('search', '(none)')}")
+                    settings_updated = True
                 settings.update(new_settings)
             last_settings_check = current_time
-        
-        # Check for new photos
-        if current_time - last_sync_time >= settings['sync_interval']:
+
+        # Check for new photos on interval or if settings were updated
+        if settings_updated or current_time - last_sync_time >= settings['sync_interval']:
             print("Checking for new photos...")
             new_photos, all_photos = sync_drive_images(service, folder_id, local_image_folder, settings)
             last_sync_time = current_time
-
-        # Prepare photo list
-        if new_photos:
-            # New photos go first
-            photos_to_display = new_photos.copy()
-            remaining_photos = [p for p in all_photos if p not in new_photos]
-            if settings['shuffle']:
-                random.shuffle(remaining_photos)
-            photos_to_display.extend(remaining_photos)
-            current_index = 0  # Start from beginning with new photos
-            photo_history = []  # Clear history with new photos
-        elif current_index >= len(all_photos):
-            # Reached end of list, reshuffle if enabled
-            if settings['shuffle']:
-                random.shuffle(all_photos)
-            current_index = 0
-            photo_history = []
-            photos_to_display = all_photos
-        else:
-            photos_to_display = all_photos
-
-        while current_index < len(photos_to_display):
-            photo_name = photos_to_display[current_index]
-            photo_path = os.path.join(local_image_folder, photo_name)
-            if not os.path.exists(photo_path):
-                current_index += 1
-                continue
-                
-            print(f"Showing photo: {photo_name}")
-            action = show_photo(photo_path, settings['display_interval'])
-            
-            if action == "exit":
-                return
-            elif action == "reshuffle":
-                random.shuffle(photos_to_display)
+            if new_photos or settings_updated:
+                # If we have new photos or settings changed, update display list
+                photos_to_display = new_photos.copy() if new_photos else []
+                remaining_photos = [p for p in all_photos if p not in new_photos]
+                if settings['shuffle']:
+                    random.shuffle(remaining_photos)
+                photos_to_display.extend(remaining_photos)
                 current_index = 0
                 photo_history = []
-                print("Reshuffling photos...")
-            elif action == "new":
-                # Force a sync check
-                last_sync_time = 0
-                break
-            elif action == "back":
-                if photo_history:
-                    current_index = photo_history.pop()
-                    continue
-            else:  # "next" or any other key
-                photo_history.append(current_index)
-                if len(photo_history) > 50:  # Limit history size
-                    photo_history.pop(0)
-                current_index += 1
+                continue
+
+        # Handle end of list
+        if current_index >= len(photos_to_display):
+            if settings['shuffle']:
+                random.shuffle(photos_to_display)
+            current_index = 0
+            photo_history = []
+
+        # Display current photo
+        photo_name = photos_to_display[current_index]
+        photo_path = os.path.join(local_image_folder, photo_name)
+        if not os.path.exists(photo_path):
+            current_index += 1
+            continue
             
-            # Check for updates during long display intervals
-            current_time = time.time()
-            if current_time - last_sync_time >= settings['sync_interval']:
-                print("Checking for new photos...")
-                new_photos, all_photos = sync_drive_images(service, folder_id, local_image_folder, settings)
+        print(f"Showing photo: {photo_name}")
+        action = show_photo(photo_path, settings['display_interval'])
+        
+        if action == "exit":
+            return
+        elif action == "reshuffle":
+            random.shuffle(photos_to_display)
+            current_index = 0
+            photo_history = []
+            print("Reshuffling photos...")
+        elif action == "new":
+            # Force a sync check with settings update
+            last_sync_time = 0
+            last_settings_check = 0
+        elif action == "back":
+            if photo_history:
+                current_index = photo_history.pop()
+        else:  # "next" or any other key
+            photo_history.append(current_index)
+            if len(photo_history) > 50:  # Limit history size
+                photo_history.pop(0)
+            current_index += 1
+            
+            # Quick check for new photos on 'next', but don't recreate search results
+            if current_time - last_sync_time >= 30:  # Only check if it's been at least 30 seconds
+                temp_settings = settings.copy()
+                temp_settings.pop('search', None)  # Remove search to preserve current order
+                new_photos, _ = sync_drive_images(service, folder_id, local_image_folder, temp_settings)
                 last_sync_time = current_time
                 if new_photos:
-                    break
+                    # Add new photos to the front but preserve the rest of the order
+                    photos_to_display = new_photos + [p for p in photos_to_display if p not in new_photos]
+                    current_index = 0  # Start showing new photos
 
 def main():
     # Load configuration
