@@ -103,21 +103,35 @@ def download_photo(service, photo, local_path):
             logger.info(f"Downloading photo with ID: {file_id}")
             file_metadata = service.files().get(fileId=file_id, fields='name').execute()
             file_name = sanitize_path(file_metadata['name'])
-            directory = ""  # Root directory
             file_path = os.path.join(local_path, file_name)
+            logger.debug(f"Single file will be saved as: {file_path}")
         else:
             if not all(key in photo for key in ['id', 'path']):
                 error_msg = "Photo dict missing required fields ('id', 'path')"
                 logger.error(error_msg)
                 raise ValueError(error_msg)
+            
             file_id = photo['id']
-            directory = photo.get('directory', '')  # Get the directory path if it exists
-            file_path = os.path.join(local_path, photo['path'])
-            logger.info(f"Downloading photo: {photo['path']} (ID: {file_id})")
+            
+            # Explicitly separate directory and filename
+            directory = photo.get('directory', '')
+            filename = photo.get('filename', os.path.basename(photo['path']))
+            
+            # Construct the full path properly
+            if directory:
+                # Create full directory path
+                dir_path = os.path.join(local_path, directory)
+                # Join with filename
+                file_path = os.path.join(dir_path, filename)
+            else:
+                # If no directory, save directly in local_path
+                file_path = os.path.join(local_path, filename)
+            
+            logger.info(f"Downloading photo to: {file_path} (ID: {file_id})")
 
-        # Create the directory structure if needed (but not including the filename)
-        if directory:
-            dir_path = os.path.join(local_path, directory)
+        # Create the directory structure if needed
+        dir_path = os.path.dirname(file_path)
+        if dir_path:
             try:
                 os.makedirs(dir_path, exist_ok=True)
                 logger.debug(f"Created/verified directory structure: {dir_path}")
