@@ -206,6 +206,9 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
         # Check for settings updates periodically
         if current_time - last_settings_check >= settings_check_interval:
             settings_folder_id = get_or_create_settings_folder(service, folder_id)
+            # Ensure settings folders exist
+            ensure_default_settings_folders(service, settings_folder_id, settings)
+            # Get current settings
             new_settings, _ = get_settings_from_folders(service, settings_folder_id, settings)
             if new_settings != settings:
                 print("\nSettings updated from Google Drive folders:")
