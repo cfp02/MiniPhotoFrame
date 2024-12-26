@@ -27,7 +27,7 @@ def sync_drive_images(service, folder_id, local_folder):
     # Create a map of photo IDs to their full info
     drive_photo_ids = {photo['id']: photo for photo in drive_photos}
     
-    # Get set of all photo names with their relative paths
+    # Get set of all photo paths
     drive_photo_paths = set()
     local_photos = {}  # Map of relative paths to full local paths
     
@@ -45,8 +45,8 @@ def sync_drive_images(service, folder_id, local_folder):
     
     # Process each photo from Drive
     for photo in drive_photos:
-        # Create relative path based on original name
-        rel_path = photo['name']
+        # Use the full path from Drive
+        rel_path = photo['path'].replace('\\', '/')  # Normalize path separators
         drive_photo_paths.add(rel_path)
         
         # Check if we need to download this photo
@@ -75,7 +75,7 @@ def sync_drive_images(service, folder_id, local_folder):
             except OSError:  # Directory not empty
                 break
     
-    return new_photos, [photo['name'] for photo in drive_photos]
+    return new_photos, [photo['path'] for photo in drive_photos]
 
 def load_config():
     config = {

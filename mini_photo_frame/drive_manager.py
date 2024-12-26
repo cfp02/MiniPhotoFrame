@@ -31,14 +31,17 @@ def list_photos(service, folder_id=None):
         ).execute()
         return results.get('files', [])
     
-    def process_folder(folder_id):
+    def process_folder(folder_id, current_path=""):
         items = get_items_in_folder(folder_id)
         for item in items:
-            # Skip the settings folder
             if item['mimeType'] == 'application/vnd.google-apps.folder':
                 if item['name'].lower() != 'settings':
-                    process_folder(item['id'])
+                    # Recursively process subfolders with updated path
+                    subfolder_path = os.path.join(current_path, item['name'])
+                    process_folder(item['id'], subfolder_path)
             else:  # It's an image
+                # Add path information to the photo
+                item['path'] = os.path.join(current_path, item['name'])
                 photos.append(item)
     
     # Start the recursive process from the root folder
