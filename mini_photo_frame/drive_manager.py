@@ -386,14 +386,12 @@ def sync_drive_images(service, folder_id, local_folder, settings=None):
         shuffle_enabled = settings.get('shuffle', False) if settings else False
         drive_photos = list_photos(service, folder_id, search_query, shuffle_enabled)
         
-        # If list_photos returns None, it means we couldn't connect
-        if drive_photos is None:
-            logger.warning("Could not connect to Google Drive. Preserving local photos.")
-            return [], sorted(local_photos)
-            
-        # If we got an empty list but have local photos, double-check internet
-        if not drive_photos and local_photos and check_internet_connection():
-            logger.warning("Got empty photo list from Drive but have local photos. Preserving local photos.")
+        # If list_photos returns None or empty list, preserve local photos
+        if drive_photos is None or not drive_photos:
+            if drive_photos is None:
+                logger.warning("Could not connect to Google Drive. Preserving local photos.")
+            else:
+                logger.warning("No photos found in Google Drive. Preserving local photos.")
             return [], sorted(local_photos)
         
         # Get set of all photo paths from Drive
@@ -417,24 +415,23 @@ def sync_drive_images(service, folder_id, local_folder, settings=None):
                     new_photos.append(rel_path)
         
         # Only remove local photos if we have a valid Drive photo list
-        if drive_photos:
-            photos_to_delete = set(local_photos_map.keys()) - drive_photo_paths
-            if photos_to_delete:
-                logger.info(f"\nRemoving {len(photos_to_delete)} photos that no longer exist in Drive:")
-                for rel_path in photos_to_delete:
-                    logger.info(f"  Deleting: {rel_path}")
-                    try:
-                        os.remove(local_photos_map[rel_path])
-                        # Remove empty directories
-                        dir_path = os.path.dirname(local_photos_map[rel_path])
-                        while dir_path != local_folder:
-                            try:
-                                os.rmdir(dir_path)
-                                dir_path = os.path.dirname(dir_path)
-                            except OSError:  # Directory not empty
-                                break
-                    except Exception as e:
-                        logger.error(f"  Error deleting {rel_path}: {str(e)}")
+        photos_to_delete = set(local_photos_map.keys()) - drive_photo_paths
+        if photos_to_delete:
+            logger.info(f"\nRemoving {len(photos_to_delete)} photos that no longer exist in Drive:")
+            for rel_path in photos_to_delete:
+                logger.info(f"  Deleting: {rel_path}")
+                try:
+                    os.remove(local_photos_map[rel_path])
+                    # Remove empty directories
+                    dir_path = os.path.dirname(local_photos_map[rel_path])
+                    while dir_path != local_folder:
+                        try:
+                            os.rmdir(dir_path)
+                            dir_path = os.path.dirname(dir_path)
+                        except OSError:  # Directory not empty
+                            break
+                except Exception as e:
+                    logger.error(f"  Error deleting {rel_path}: {str(e)}")
         
         # Return paths for all photos, with new ones first
         all_paths = [p['path'] for p in drive_photos]
