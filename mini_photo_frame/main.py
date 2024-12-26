@@ -7,8 +7,9 @@ from drive_auth import (
     is_frozen, 
     get_base_path
 )
+import drive_manager
 from drive_manager import (
-    create_drive_service, list_photos, download_photo,
+    create_drive_service, download_photo,
     get_or_create_settings_folder, get_settings_from_folders,
     ensure_default_settings_folders, check_internet_connection
 )
