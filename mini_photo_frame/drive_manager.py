@@ -107,23 +107,33 @@ def download_photo(service, photo, local_path):
                 logger.error(error_msg)
                 raise ValueError(error_msg)
             file_id = photo['id']
-            # Join paths without normalization to preserve the intended structure
             file_path = os.path.join(local_path, photo['path'])
             logger.info(f"Downloading photo: {photo['path']} (ID: {file_id})")
 
-        # Get the directory path without the filename
+        # Split the path into directory and filename
         parent_dir = os.path.dirname(file_path)
+        file_name = os.path.basename(file_path)
         
-        # Verify we're not trying to create a directory with the same name as the file
-        if os.path.exists(file_path) and os.path.isdir(file_path):
-            logger.warning(f"Found directory with same name as file, removing: {file_path}")
-            os.rmdir(file_path)  # This will only remove if empty
+        # Remove any existing directory that matches our full file path
+        if os.path.exists(file_path):
+            if os.path.isdir(file_path):
+                logger.warning(f"Found directory instead of file, removing: {file_path}")
+                try:
+                    os.rmdir(file_path)  # This will only remove if empty
+                except Exception as e:
+                    logger.error(f"Could not remove directory {file_path}: {str(e)}")
+                    return None
         
-        # Create parent directory if needed
-        if parent_dir and not os.path.exists(parent_dir):
-            os.makedirs(parent_dir, exist_ok=True)
-            logger.debug(f"Created directory: {parent_dir}")
+        # Create the parent directory structure if needed
+        if parent_dir:
+            try:
+                os.makedirs(parent_dir, exist_ok=True)
+                logger.debug(f"Created/verified directory structure: {parent_dir}")
+            except Exception as e:
+                logger.error(f"Failed to create directory structure {parent_dir}: {str(e)}")
+                return None
         
+        # Download the file
         request = service.files().get_media(fileId=file_id)
         
         # Stream the file to disk
@@ -135,11 +145,16 @@ def download_photo(service, photo, local_path):
                 logger.debug(f"Download progress: {int(status.progress() * 100)}%")
             fh.seek(0)
             
-            with open(file_path, 'wb') as f:
-                f.write(fh.read())
-        
-        logger.info(f"Successfully downloaded photo to: {file_path}")
-        return file_path
+            # Write the file
+            try:
+                with open(file_path, 'wb') as f:
+                    f.write(fh.read())
+                logger.info(f"Successfully downloaded photo to: {file_path}")
+                return file_path
+            except Exception as e:
+                logger.error(f"Failed to write file {file_path}: {str(e)}")
+                return None
+                
     except Exception as e:
         logger.error(f"Error downloading photo: {str(e)}")
         return None
