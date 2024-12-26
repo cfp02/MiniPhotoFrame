@@ -78,12 +78,16 @@ def list_photos(service, folder_id=None):
             if item['mimeType'] == 'application/vnd.google-apps.folder':
                 if item['name'].lower() != 'settings':
                     logger.debug(f"Processing subfolder: {safe_name}")
+                    # For folders, just append the folder name to the current path
                     subfolder_path = os.path.join(current_path, safe_name) if current_path else safe_name
                     process_folder(item['id'], subfolder_path)
                 else:
                     logger.debug("Skipping settings folder")
             else:
+                # Store both the full path and the filename separately
+                item['filename'] = safe_name
                 item['path'] = os.path.join(current_path, safe_name) if current_path else safe_name
+                item['directory'] = current_path  # Store the directory path separately
                 logger.debug(f"Found photo: {item['path']}")
                 photos.append(item)
     
@@ -99,38 +103,26 @@ def download_photo(service, photo, local_path):
             logger.info(f"Downloading photo with ID: {file_id}")
             file_metadata = service.files().get(fileId=file_id, fields='name').execute()
             file_name = sanitize_path(file_metadata['name'])
+            directory = ""  # Root directory
             file_path = os.path.join(local_path, file_name)
-            logger.debug(f"Photo will be saved as: {file_name}")
         else:
             if not all(key in photo for key in ['id', 'path']):
                 error_msg = "Photo dict missing required fields ('id', 'path')"
                 logger.error(error_msg)
                 raise ValueError(error_msg)
             file_id = photo['id']
+            directory = photo.get('directory', '')  # Get the directory path if it exists
             file_path = os.path.join(local_path, photo['path'])
             logger.info(f"Downloading photo: {photo['path']} (ID: {file_id})")
 
-        # Split the path into directory and filename
-        parent_dir = os.path.dirname(file_path)
-        file_name = os.path.basename(file_path)
-        
-        # Remove any existing directory that matches our full file path
-        if os.path.exists(file_path):
-            if os.path.isdir(file_path):
-                logger.warning(f"Found directory instead of file, removing: {file_path}")
-                try:
-                    os.rmdir(file_path)  # This will only remove if empty
-                except Exception as e:
-                    logger.error(f"Could not remove directory {file_path}: {str(e)}")
-                    return None
-        
-        # Create the parent directory structure if needed
-        if parent_dir:
+        # Create the directory structure if needed (but not including the filename)
+        if directory:
+            dir_path = os.path.join(local_path, directory)
             try:
-                os.makedirs(parent_dir, exist_ok=True)
-                logger.debug(f"Created/verified directory structure: {parent_dir}")
+                os.makedirs(dir_path, exist_ok=True)
+                logger.debug(f"Created/verified directory structure: {dir_path}")
             except Exception as e:
-                logger.error(f"Failed to create directory structure {parent_dir}: {str(e)}")
+                logger.error(f"Failed to create directory structure {dir_path}: {str(e)}")
                 return None
         
         # Download the file
