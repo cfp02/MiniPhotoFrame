@@ -355,14 +355,19 @@ def check_internet_connection():
 
 def sync_drive_images(service, folder_id, local_folder, settings=None):
     """Syncs images and returns a list of any new photos downloaded"""
-    # Check internet connection first
-    if not check_internet_connection():
-        logger.warning("No internet connection detected. Skipping sync with Google Drive.")
-        # Return empty lists to continue with local photos
-        return [], [os.path.relpath(os.path.join(root, f), local_folder).replace('\\', '/')
-                   for root, _, files in os.walk(local_folder)
-                   for f in files if f != ".gitkeep"]
+    # Handle offline mode (service is None) or no internet connection
+    if service is None or not check_internet_connection():
+        logger.warning("Operating in offline mode. Using local photos only.")
+        # Return empty list for new photos and list of all local photos
+        local_photos = []
+        for root, _, files in os.walk(local_folder):
+            for file in files:
+                if file != ".gitkeep":
+                    rel_path = os.path.relpath(os.path.join(root, file), local_folder).replace('\\', '/')
+                    local_photos.append(rel_path)
+        return [], local_photos
 
+    # Online mode - proceed with normal sync
     # Ensure the local folder exists
     if not os.path.exists(local_folder):
         os.makedirs(local_folder)
