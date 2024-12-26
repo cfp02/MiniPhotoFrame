@@ -5,6 +5,7 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 import googleapiclient.http
 import io
 import logging
+import random
 
 # Set up logging with more detailed format
 logging.basicConfig(
@@ -48,7 +49,7 @@ def sanitize_path(name):
     # but keep spaces and periods as they're handled fine by os.path
     return name
 
-def list_photos(service, folder_id=None, search_query=None):
+def list_photos(service, folder_id=None, search_query=None, shuffle_enabled=False):
     """List all photos in the given folder and its subfolders, excluding the settings folder"""
     logger.info(f"Listing photos from folder ID: {folder_id}")
     if search_query:
@@ -68,7 +69,7 @@ def list_photos(service, folder_id=None, search_query=None):
                     q=query,
                     spaces='drive',
                     fields="nextPageToken, files(id, name, mimeType, createdTime, description)",
-                    orderBy="createdTime desc",
+                    orderBy="createdTime desc",  # Most recent first
                     pageToken=page_token,
                     pageSize=1000
                 ).execute()
@@ -119,13 +120,26 @@ def list_photos(service, folder_id=None, search_query=None):
     
     process_folder(folder_id)
     
-    # If there's a search query, prioritize matching photos
+    # Sort photos by creation time (newest first)
+    photos.sort(key=lambda x: x.get('createdTime', ''), reverse=True)
+    
+    # If there's a search query, handle the search matches
     if search_query and search_matches:
         # Remove matching photos from main list to avoid duplicates
         photos = [p for p in photos if p not in search_matches]
-        # Add matching photos at the beginning
+        
+        # If shuffle is enabled, shuffle the search matches
+        if shuffle_enabled:
+            random.shuffle(search_matches)
+            logger.info("Shuffling search matches")
+        else:
+            # Sort search matches by creation time if not shuffling
+            search_matches.sort(key=lambda x: x.get('createdTime', ''), reverse=True)
+            logger.info("Sorting search matches by creation time")
+        
+        # Add search matches after any new photos but before the rest
         photos = search_matches + photos
-        logger.info(f"Search results: {len(search_matches)} photos match '{search_query}', reordering them to show first")
+        logger.info(f"Search results: {len(search_matches)} photos match '{search_query}', reordering them to show after new photos")
     elif search_query:
         logger.info(f"No photos found matching search query: '{search_query}'")
     

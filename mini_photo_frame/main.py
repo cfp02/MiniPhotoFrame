@@ -69,7 +69,8 @@ def sync_drive_images(service, folder_id, local_folder, settings=None):
 
     # Step 1: Get list of photos in Google Drive (sorted by creation time)
     search_query = settings.get('search', '').lower() if settings else None
-    drive_photos = list_photos(service, folder_id, search_query)
+    shuffle_enabled = settings.get('shuffle', False) if settings else False
+    drive_photos = list_photos(service, folder_id, search_query, shuffle_enabled)
     
     # Create a map of photo IDs to their full info
     drive_photo_ids = {photo['id']: photo for photo in drive_photos}
