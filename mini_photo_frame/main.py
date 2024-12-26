@@ -15,6 +15,52 @@ from drive_manager import (
 from display_manager import show_photo
 from datetime import datetime, timedelta
 
+def load_config():
+    """Load configuration from config.txt file"""
+    config = {
+        'FOLDER_ID': None,
+        'DISPLAY_INTERVAL': 45 * 60,  # 45 minutes default
+        'SYNC_INTERVAL': 5 * 60,      # 5 minutes default
+        'SHUFFLE': True,              # Shuffle by default after showing new photos
+    }
+    
+    # Try to find config file in different locations
+    possible_paths = [
+        # Deployed mode: config.txt next to executable
+        os.path.join(get_base_path(), 'config.txt'),
+        # Development mode: config.txt in project root
+        os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'config.txt'),
+        # Fallback: config.txt in current directory
+        'config.txt'
+    ]
+    
+    config_path = None
+    for path in possible_paths:
+        if os.path.exists(path):
+            config_path = path
+            break
+    
+    if config_path:
+        print(f"Using config file: {config_path}")
+        with open(config_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    key, value = line.split('=', 1)
+                    config[key.strip()] = value.strip()
+        
+        # Convert values to appropriate types
+        config['DISPLAY_INTERVAL'] = int(config['DISPLAY_INTERVAL'])
+        config['SYNC_INTERVAL'] = int(config['SYNC_INTERVAL'])
+        if 'SHUFFLE' in config:
+            config['SHUFFLE'] = config['SHUFFLE'].lower() == 'true'
+    else:
+        print("\nNo config.txt found. Using default settings.")
+        if not is_frozen():
+            print("Development mode: Create a config.txt file in the project root.")
+    
+    return config
+
 def sync_drive_images(service, folder_id, local_folder):
     """Syncs images and returns a list of any new photos downloaded"""
     # Ensure the local folder exists
