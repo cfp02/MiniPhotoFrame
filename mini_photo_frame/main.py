@@ -266,9 +266,11 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
                 photo_history = []
                 already_shown.clear()
             elif new_photos:
-                # If just new photos, add them to the start but preserve current queue
-                photos_to_display = new_photos + [p for p in photos_to_display if p not in new_photos]
-                print(f"Added {len(new_photos)} new photos to the start of the queue")
+                # Insert new photos at current position
+                photos_before = photos_to_display[:current_index]
+                photos_after = photos_to_display[current_index:]
+                photos_to_display = photos_before + new_photos + [p for p in photos_after if p not in new_photos]
+                print(f"Added {len(new_photos)} new photos at current position in the queue")
 
         # Handle end of list
         if current_index >= len(photos_to_display):
@@ -331,9 +333,11 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
                 new_photos, _ = sync_drive_images(service, folder_id, local_image_folder, temp_settings)
                 last_sync_time = current_time
                 if new_photos:
-                    # Add new photos to the front but preserve current queue
-                    photos_to_display = new_photos + [p for p in photos_to_display if p not in new_photos]
-                    print(f"Added {len(new_photos)} new photos to the start of the queue")
+                    # Insert new photos at current position
+                    photos_before = photos_to_display[:current_index]
+                    photos_after = photos_to_display[current_index:]
+                    photos_to_display = photos_before + new_photos + [p for p in photos_after if p not in new_photos]
+                    print(f"Added {len(new_photos)} new photos at current position in the queue")
 
 def main():
     # Load configuration
