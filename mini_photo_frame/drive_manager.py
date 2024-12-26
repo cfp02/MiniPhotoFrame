@@ -107,14 +107,22 @@ def download_photo(service, photo, local_path):
                 logger.error(error_msg)
                 raise ValueError(error_msg)
             file_id = photo['id']
+            # Join paths without normalization to preserve the intended structure
             file_path = os.path.join(local_path, photo['path'])
             logger.info(f"Downloading photo: {photo['path']} (ID: {file_id})")
 
-        # Create parent directory if it doesn't exist
+        # Get the directory path without the filename
         parent_dir = os.path.dirname(file_path)
-        if parent_dir:
+        
+        # Verify we're not trying to create a directory with the same name as the file
+        if os.path.exists(file_path) and os.path.isdir(file_path):
+            logger.warning(f"Found directory with same name as file, removing: {file_path}")
+            os.rmdir(file_path)  # This will only remove if empty
+        
+        # Create parent directory if needed
+        if parent_dir and not os.path.exists(parent_dir):
             os.makedirs(parent_dir, exist_ok=True)
-            logger.debug(f"Ensured directory exists: {parent_dir}")
+            logger.debug(f"Created directory: {parent_dir}")
         
         request = service.files().get_media(fileId=file_id)
         
