@@ -112,21 +112,8 @@ def download_photo(service, photo, local_path):
                 raise ValueError(error_msg)
             
             file_id = photo['id']
-            
-            # Explicitly separate directory and filename
-            directory = photo.get('directory', '')
-            filename = photo.get('filename', os.path.basename(photo['path']))
-            
-            # Construct the full path properly
-            if directory:
-                # Create full directory path
-                dir_path = os.path.join(local_path, directory)
-                # Join with filename
-                file_path = os.path.join(dir_path, filename)
-            else:
-                # If no directory, save directly in local_path
-                file_path = os.path.join(local_path, filename)
-            
+            # Use the path directly as it's already properly constructed
+            file_path = os.path.join(local_path, photo['path'])
             logger.info(f"Downloading photo to: {file_path} (ID: {file_id})")
 
         # Create the directory structure if needed
