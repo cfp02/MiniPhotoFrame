@@ -8,3 +8,4 @@ opencv-python
 pyinstaller
 setuptools
 iptcinfo3
+pyautogui

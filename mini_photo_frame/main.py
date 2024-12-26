@@ -2,6 +2,7 @@ import time
 import os
 import random
 import sys
+import pyautogui
 from drive_auth import (
     authenticate_google_drive, 
     is_frozen, 
@@ -16,6 +17,16 @@ from drive_manager import (
 from display_manager import show_photo
 from datetime import datetime, timedelta
 import logging
+
+def move_mouse_to_corner():
+    """Move mouse to bottom right corner"""
+    try:
+        # Get screen size
+        screen_width, screen_height = pyautogui.size()
+        # Move to bottom right (subtract a few pixels to ensure it triggers corner)
+        pyautogui.moveTo(screen_width - 1, screen_height - 1)
+    except Exception as e:
+        print(f"Could not move mouse: {str(e)}")
 
 def load_config():
     """Load configuration from config.txt file"""
@@ -292,6 +303,9 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
                     print(f"Added {len(new_photos)} new photos at current position in the queue")
 
 def main():
+    # Move mouse to corner at startup
+    move_mouse_to_corner()
+    
     # Load configuration
     config = load_config()
     
