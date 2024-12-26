@@ -8,7 +8,7 @@ import logging
 
 # Set up logging with more detailed format
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
@@ -103,7 +103,7 @@ def download_photo(service, photo, local_path):
             logger.info(f"Downloading photo with ID: {file_id}")
             file_metadata = service.files().get(fileId=file_id, fields='name').execute()
             file_name = sanitize_path(file_metadata['name'])
-            file_path = os.path.join(local_path, file_name)
+            file_path = local_path #os.path.join(local_path, file_name)
             logger.debug(f"Single file will be saved as: {file_path}")
         else:
             if not all(key in photo for key in ['id', 'path']):
