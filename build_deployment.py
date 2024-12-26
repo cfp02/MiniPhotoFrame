@@ -97,6 +97,15 @@ SYNC_INTERVAL=300
 # Can be overridden by creating a folder named 'shuffle_true' or 'shuffle_false' in the settings folder
 SHUFFLE=true
 
+# Logging level (default: INFO)
+# Available levels, from most to least verbose:
+#   DEBUG   - Show all debug messages, very detailed logging
+#   INFO    - Show general operation information (default)
+#   WARNING - Show only warnings and errors
+#   ERROR   - Show only errors
+#   CRITICAL - Show only critical errors
+LOG_LEVEL=INFO
+
 # Path to store downloaded images (optional)
 # If not specified, will use 'images' folder in the same directory as the executable
 # Examples:
