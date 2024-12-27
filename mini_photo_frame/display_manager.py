@@ -102,10 +102,11 @@ def show_photo(image_path, display_interval):
     screen_width = screen.width
     screen_height = screen.height
     
-    # Calculate padding to match original implementation
+    # Calculate padding with proper scaling for screen height
     image_height = img.shape[0]  # Should be 1200
     image_width = img.shape[1]   # Should be 1800 for landscape
-    lr_padding = int((screen_width - image_width) / 2) + 17  # Added the +17 adjustment
+    image_ratio = screen_height / image_height  # Scale padding based on screen height
+    lr_padding = int((screen_width - image_width * image_ratio)/2) + 17
     
     # Add padding
     img = cv2.copyMakeBorder(
