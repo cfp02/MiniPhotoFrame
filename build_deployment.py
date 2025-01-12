@@ -85,6 +85,11 @@ Note:
 # This is the long string of characters in the URL when you open your Google Drive folder
 FOLDER_ID=your_google_drive_folder_id_here
 
+# Display mode (simple or original)
+# simple: Just shows photos centered with black borders
+# original: Shows photos with captions and calculated borders (for bird photo frame)
+DISPLAY_MODE=simple
+
 # Display interval in seconds (45 minutes default)
 # Can be overridden by creating a folder named 'display_interval_mins_45' in the settings folder
 DISPLAY_INTERVAL=2700
