@@ -5,6 +5,7 @@ from iptcinfo3 import IPTCInfo
 import logging
 import os
 import platform
+import numpy as np
 
 # Suppress IPTCInfo warnings
 iptcinfo_logger = logging.getLogger('iptcinfo')
@@ -167,7 +168,7 @@ def show_photo_simple(image_path, display_interval):
     img = cv2.resize(img, (new_width, new_height))
     
     # Create black canvas of screen size
-    canvas = cv2.zeros((screen_height, screen_width, 3), dtype=img.dtype)
+    canvas = np.zeros((screen_height, screen_width, 3), dtype=img.dtype)
     
     # Calculate position to center image
     y_offset = (screen_height - new_height) // 2
