@@ -14,7 +14,7 @@ from drive_manager import (
     get_or_create_settings_folder, get_settings_from_folders,
     ensure_default_settings_folders, check_internet_connection
 )
-from display_manager import show_photo
+from display_manager import show_photo, show_photo_simple
 from datetime import datetime, timedelta
 import logging
 
@@ -175,6 +175,9 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
     photos_to_display = all_photos
     already_shown = set()  # Track which photos have been shown
 
+    # Get display function based on config
+    display_func = show_photo_simple if settings.get('display_mode') == 'simple' else show_photo
+
     while True:
         current_time = time.time()
         settings_updated = False
@@ -264,7 +267,7 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
             
         print(f"Showing photo: {photo_name}")
         already_shown.add(photo_name)  # Mark this photo as shown
-        action = show_photo(photo_path, settings['display_interval'])
+        action = display_func(photo_path, settings['display_interval'])
         
         if action == "exit":
             return
@@ -333,8 +336,11 @@ def main():
         'display_interval': config['DISPLAY_INTERVAL'],
         'sync_interval': config['SYNC_INTERVAL'],
         'shuffle': config.get('SHUFFLE', True),
-        'filter': None
+        'filter': None,
+        'display_mode': config.get('DISPLAY_MODE', 'original')  # Default to original mode if not specified
     }
+    
+    print(f"\nUsing display mode: {settings['display_mode']}")
     
     # Check internet connectivity
     if not check_internet_connection():

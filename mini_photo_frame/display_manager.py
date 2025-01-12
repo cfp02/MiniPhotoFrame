@@ -141,3 +141,60 @@ def show_photo(image_path, display_interval):
         return "back"
     else:
         return "next"
+
+def show_photo_simple(image_path, display_interval):
+    """Display photo centered on screen with full black borders, no captions"""
+    # Read image
+    img = cv2.imread(image_path)
+    if img is None:
+        print(f"Error loading image: {image_path}")
+        return None
+        
+    # Get screen dimensions
+    screen = get_monitors()[0]
+    screen_width = screen.width
+    screen_height = screen.height
+    
+    # Calculate scaling to fit within screen while maintaining aspect ratio
+    img_height, img_width = img.shape[:2]
+    width_ratio = screen_width / img_width
+    height_ratio = screen_height / img_height
+    scale_factor = min(width_ratio, height_ratio)
+    
+    # Scale image
+    new_width = int(img_width * scale_factor)
+    new_height = int(img_height * scale_factor)
+    img = cv2.resize(img, (new_width, new_height))
+    
+    # Create black canvas of screen size
+    canvas = cv2.zeros((screen_height, screen_width, 3), dtype=img.dtype)
+    
+    # Calculate position to center image
+    y_offset = (screen_height - new_height) // 2
+    x_offset = (screen_width - new_width) // 2
+    
+    # Place image on canvas
+    canvas[y_offset:y_offset+new_height, x_offset:x_offset+new_width] = img
+    
+    # Display fullscreen
+    window_name = "Photo Frame"
+    cv2.namedWindow(window_name, cv2.WND_PROP_FULLSCREEN)
+    cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    cv2.imshow(window_name, canvas)
+    
+    # Wait for key press or interval
+    key = cv2.waitKey(display_interval * 1000)
+    cv2.destroyAllWindows()
+    
+    if key == -1:  # No key pressed
+        return "next"
+    elif key == 27:  # ESC
+        return "exit"
+    elif key == ord('r'):  # Reshuffle
+        return "reshuffle"
+    elif key == ord('n'):  # New images
+        return "new"
+    elif key == ord('b'):  # Back
+        return "back"
+    else:
+        return "next"
