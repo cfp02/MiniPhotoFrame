@@ -15,6 +15,21 @@ iptcinfo_logger.setLevel(logging.ERROR)
 if platform.system() == 'Linux':
     os.environ['QT_QPA_PLATFORM'] = 'xcb'
 
+def rotate_image(img, rotation):
+    """Rotate image by specified degrees (0, 90, 180, or 270)"""
+    if rotation not in [0, 90, 180, 270]:
+        logging.warning(f"Invalid rotation value {rotation}, using 0")
+        return img
+        
+    if rotation == 0:
+        return img
+    elif rotation == 90:
+        return cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+    elif rotation == 180:
+        return cv2.rotate(img, cv2.ROTATE_180)
+    else:  # 270
+        return cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
 def get_caption(image_path):
     """Get caption and date from image IPTC info"""
     try:
@@ -43,7 +58,7 @@ def get_caption(image_path):
         print(f"Error reading caption: {e}")
         return os.path.basename(image_path)
 
-def get_display_image(image_path):
+def get_display_image(image_path, rotation=0):
     """Prepare image for display with caption"""
     target_width = 1800   # Fixed width for landscape
     target_height = 1200  # Fixed height
@@ -53,6 +68,9 @@ def get_display_image(image_path):
     if img is None:
         print(f"Error loading image: {image_path}")
         return None
+    
+    # Apply rotation if specified
+    img = rotate_image(img, rotation)
         
     # Scale image to target dimensions
     img_height, img_width = img.shape[:2]
@@ -92,9 +110,9 @@ def get_display_image(image_path):
     
     return img
 
-def show_photo(image_path, display_interval):
+def show_photo(image_path, display_interval, rotation=0):
     """Display photo with proper scaling and return key press"""
-    img = get_display_image(image_path)
+    img = get_display_image(image_path, rotation)
     if img is None:
         return None
         
@@ -143,13 +161,16 @@ def show_photo(image_path, display_interval):
     else:
         return "next"
 
-def show_photo_simple(image_path, display_interval):
+def show_photo_simple(image_path, display_interval, rotation=0):
     """Display photo centered on screen with full black borders, no captions"""
     # Read image
     img = cv2.imread(image_path)
     if img is None:
         print(f"Error loading image: {image_path}")
         return None
+        
+    # Apply rotation if specified
+    img = rotate_image(img, rotation)
         
     # Get screen dimensions
     screen = get_monitors()[0]

@@ -17,9 +17,6 @@ def build_executable():
     print(f"Building from: {main_path}")
     print(f"Deployment path: {deployment_path}")
     
-    # Get the correct extension for the executable based on the platform
-    exe_extension = '.exe' if sys.platform == 'win32' else ''
-    
     # Create deployment directory structure
     if os.path.exists(deployment_path):
         # Don't delete the entire deployment folder, just clean up non-essential files
@@ -36,42 +33,47 @@ def build_executable():
     # Ensure service_account directory exists
     os.makedirs(os.path.join(deployment_path, 'service_account'), exist_ok=True)
     
-    # PyInstaller configuration
+    # PyInstaller configuration optimized for Pi Zero
     PyInstaller.__main__.run([
         main_path,
         '--onefile',
         '--name=photo_frame',
         f'--distpath={deployment_path}',
         '--clean',
+        '--noupx',  # UPX can cause issues on ARM
+        '--hidden-import=PIL._tkinter',  # Required for Pillow
+        '--hidden-import=google.auth.transport.requests',  # Required for Google Auth
+        '--hidden-import=google.oauth2.credentials',  # Required for Google Auth
+        '--hidden-import=google_auth_oauthlib.flow',  # Required for Google Auth
     ])
     
     # Create README
     with open(os.path.join(deployment_path, 'README.txt'), 'w') as f:
-        f.write(f"""Mini Photo Frame Deployment Package
+        f.write("""Mini Photo Frame Deployment Package for Raspberry Pi
 
 Setup Instructions:
-1. Copy this entire folder to your target machine
+1. Run install_dependencies.sh to install required system packages
 2. Place your Google Drive service account JSON file in the 'service_account' folder
 3. Edit config.txt to set your Google Drive folder ID
-4. (Optional) Set IMAGES_PATH in config.txt for persistent storage
-5. Run the photo_frame{exe_extension} executable
+4. Run the photo_frame executable
 
-Configuration:
-1. Local config.txt file (basic settings):
-   - Display interval: 45 minutes per photo
-   - Sync interval: Checks for new photos every 5 minutes
-   - Shuffle mode: On by default
-   - Images path: Where to store downloaded photos
+To run at startup:
+1. Create an autostart entry:
+   mkdir -p ~/.config/autostart
+   nano ~/.config/autostart/photoframe.desktop
 
-2. Google Drive settings (dynamic settings):
-   The program will create a 'settings' folder in your Google Drive where
-   you can change settings by creating/renaming folders:
-   - display_interval_mins_45 (changes display time to 45 minutes)
-   - sync_interval_mins_5 (changes sync interval to 5 minutes)
-   - shuffle_true/shuffle_false (enables/disables shuffle)
+2. Add the following content:
+   [Desktop Entry]
+   Type=Application
+   Name=Photo Frame
+   Exec=/path/to/photo_frame
+   Hidden=false
+   X-GNOME-Autostart-enabled=true
+
+3. Make the file executable:
+   chmod +x ~/.config/autostart/photoframe.desktop
 
 Note: 
-- Google Drive settings override local config.txt settings
 - Set IMAGES_PATH in config.txt to keep photos between updates
 - Default storage is in the 'images' folder next to the executable
 """)
@@ -87,7 +89,7 @@ FOLDER_ID=your_google_drive_folder_id_here
 
 # Display mode (simple or original)
 # simple: Just shows photos centered with black borders
-# original: Shows photos with captions and calculated borders (for bird photo frame)
+# original: Shows photos with captions and calculated borders
 DISPLAY_MODE=simple
 
 # Image rotation in degrees (0, 90, 180, or 270)
@@ -121,21 +123,17 @@ LOG_LEVEL=INFO
 
 # Path to store downloaded images (optional)
 # If not specified, will use 'images' folder in the same directory as the executable
-# Examples:
-#   Windows: IMAGES_PATH=C:/PhotoFrame/images
-#   Mac/Linux: IMAGES_PATH=/Users/username/PhotoFrame/images
-#   Relative: IMAGES_PATH=../persistent_images
 IMAGES_PATH=""")
 
-    print(f"""
+    print("""
 Deployment package created successfully!
 
-To deploy:
-1. Copy the entire 'deployment' folder to your target machine
-2. Place your service account JSON file in the 'deployment/service_account' folder
-3. Edit 'deployment/config.txt' to set your Google Drive folder ID
-4. (Optional) Set IMAGES_PATH in config.txt for persistent storage
-5. Run 'deployment/photo_frame{exe_extension}'
+To deploy to Raspberry Pi Zero:
+1. Copy the entire 'deployment' folder to your Pi
+2. Run install_dependencies.sh to install required packages
+3. Place your service account JSON file in the 'deployment/service_account' folder
+4. Edit 'deployment/config.txt' to set your Google Drive folder ID
+5. Run 'deployment/photo_frame'
 """)
 
 if __name__ == "__main__":

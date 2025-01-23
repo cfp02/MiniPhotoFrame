@@ -267,7 +267,7 @@ def run_digital_picture_frame(folder_id, local_image_folder, service, settings):
             
         print(f"Showing photo: {photo_name}")
         already_shown.add(photo_name)  # Mark this photo as shown
-        action = display_func(photo_path, settings['display_interval'])
+        action = display_func(photo_path, settings['display_interval'], settings['rotation'])
         
         if action == "exit":
             return
@@ -337,10 +337,12 @@ def main():
         'sync_interval': config['SYNC_INTERVAL'],
         'shuffle': config.get('SHUFFLE', True),
         'filter': None,
-        'display_mode': config.get('DISPLAY_MODE', 'original')  # Default to original mode if not specified
+        'display_mode': config.get('DISPLAY_MODE', 'original'),  # Default to original mode if not specified
+        'rotation': int(config.get('ROTATION', '0'))  # Default to 0 if not specified
     }
     
     print(f"\nUsing display mode: {settings['display_mode']}")
+    print(f"Image rotation: {settings['rotation']} degrees")
     
     # Check internet connectivity
     if not check_internet_connection():
