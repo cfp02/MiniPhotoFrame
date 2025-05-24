@@ -9,3 +9,4 @@ pyinstaller
 setuptools
 iptcinfo3
 pyautogui
+pygame
